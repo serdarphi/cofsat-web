@@ -689,4 +689,122 @@ else:
         </div>
         """,
         unsafe_allow_html=True,
-    )
+    )import io
+import math
+from dataclasses import dataclass, asdict
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import numpy as np
+from PIL import Image, ImageStat
+import streamlit as st
+
+# ================= CONFIG =================
+st.set_page_config(
+    page_title="ÇOFSAT Fotoğraf Ön Değerlendirme",
+    layout="wide",
+    page_icon="📷",
+)
+
+# ================= CSS (UI POLISH) =================
+st.markdown("""
+<style>
+.stApp {
+    background: linear-gradient(180deg, #050505 0%, #0d0d0d 100%);
+    color: #f5f5f5;
+}
+
+.hero {
+    padding: 1.8rem;
+    border: 1px solid rgba(212,175,55,.18);
+    border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255,255,255,.04), rgba(212,175,55,.08));
+    box-shadow: 0 14px 40px rgba(0,0,0,.35);
+    margin-bottom: 1rem;
+}
+
+.hero h1 {
+    color: #fff7dc;
+}
+
+.mini-note {
+    color: rgba(255,255,255,.96);
+}
+
+div[data-testid="stMetricValue"] {
+    color: #ffffff !important;
+    font-weight: 800 !important;
+    font-size: 1.5rem !important;
+}
+
+div[data-testid="stMetricLabel"] {
+    color: rgba(255,255,255,.95) !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# ================= LOGO =================
+def find_logo():
+    for f in ["logo.png", "logo.jpg", "logo.jpeg"]:
+        if Path(f).exists():
+            return f
+    return None
+
+logo = find_logo()
+
+# ================= HEADER =================
+col1, col2 = st.columns([0.2, 0.8])
+
+with col1:
+    if logo:
+        st.image(logo, width=120)
+
+with col2:
+    st.markdown("""
+    <div class="hero">
+        <h1>ÇOFSAT Fotoğraf Ön Değerlendirme</h1>
+        <p>Fotoğrafı sadece beğenmek için değil, okumak için.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ================= UPLOAD =================
+st.markdown("### Fotoğraf yükleyin")
+
+uploaded_file = st.file_uploader("", type=["jpg","png","jpeg"])
+
+# ================= ANALİZ =================
+if uploaded_file:
+    img = Image.open(io.BytesIO(uploaded_file.getvalue())).convert("RGB")
+    gray = np.array(img.convert("L"))
+
+    mean = np.mean(gray)
+    std = np.std(gray)
+
+    score = int((std / 80) * 100)
+    score = max(0, min(score, 100))
+
+    colA, colB = st.columns([1,1])
+
+    with colA:
+        st.image(img, use_container_width=True)
+
+    with colB:
+        st.metric("ÇOFSAT Skoru", f"{score}/100")
+
+    st.markdown("---")
+
+    st.markdown("## Değerlendirme Kategorileri")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Teknik", score)
+    c2.metric("Kadraj", score-5)
+    c3.metric("Anlatı", score-10)
+    c4.metric("Niyet", score-3)
+
+else:
+    st.markdown("""
+    <div class="mini-note">
+    Başlamak için bir fotoğraf yükleyin.
+    </div>
+    """, unsafe_allow_html=True)
