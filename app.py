@@ -592,7 +592,7 @@ st.markdown(
     .upload-label {
         font-size: 1rem;
         font-weight: 700;
-        color: #f1d67a;
+        color: #ffffff;
         margin-bottom: .35rem;
     }
 
@@ -621,6 +621,14 @@ st.markdown(
     div[data-testid="stFileUploader"] section:hover {
         border-color: rgba(255,220,120,.35) !important;
         background: rgba(255,255,255,.03);
+    }
+
+    div[data-testid="stFileUploader"] small,
+    div[data-testid="stFileUploader"] span,
+    div[data-testid="stFileUploader"] label,
+    div[data-testid="stFileUploader"] p {
+        color: #ffffff !important;
+        opacity: 1 !important;
     }
 
     div[data-testid="stMetric"] {
@@ -713,7 +721,7 @@ st.markdown(
         color: #fff8dc;
         border: 1px solid rgba(212,175,55,.28);
         border-radius: 14px;
-        padding: 0.65rem 1rem;
+        padding: 0.75rem 1.1rem;
         font-weight: 700;
         transition: all .25s ease;
         box-shadow: 0 8px 18px rgba(0,0,0,.16);
@@ -731,6 +739,12 @@ st.markdown(
     .stButton > button:active {
         outline: none !important;
         box-shadow: 0 0 0 0.15rem rgba(212,175,55,.18);
+    }
+
+    .welcome-button-wrap {
+        margin-top: .35rem;
+        margin-bottom: 1rem;
+        animation: fadeInUp .82s ease;
     }
     </style>
     """,
@@ -773,6 +787,10 @@ with header_right:
         """,
         unsafe_allow_html=True,
     )
+
+st.markdown("<div class='welcome-button-wrap'></div>", unsafe_allow_html=True)
+if st.button("Fotoğraf yüklemeye başla"):
+    st.toast("Aşağıdan fotoğrafınızı yükleyebilirsiniz.", icon="📷")
 
 col_intro_1, col_intro_2 = st.columns([1.15, 1])
 
