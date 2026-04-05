@@ -1,7 +1,7 @@
-
 import io
 import math
 from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -14,7 +14,15 @@ except ImportError:
 
 import streamlit as st
 
-st.set_page_config(page_title="ÇOFSAT Web", page_icon="📷", layout="wide")
+st.set_page_config(
+    page_title="ÇOFSAT Fotoğraf Ön Değerlendirme",
+    layout="wide",
+    page_icon="📷",
+)
+
+# ============================================================
+# ÇOFSAT Fotoğraf Ön Değerlendirme
+# ============================================================
 
 CULTURE = {
     "ad": "ÇOFSAT",
@@ -62,6 +70,7 @@ RUBRIC_LABELS = {
     "niyet_ve_tutarlilik": "Niyet ve Tutarlılık",
 }
 
+
 @dataclass
 class ImageMetrics:
     width: int
@@ -83,6 +92,7 @@ class ImageMetrics:
     tonal_balance_score: float
     dynamic_tension_score: float
 
+
 @dataclass
 class CritiqueResult:
     total_score: float
@@ -94,6 +104,14 @@ class CritiqueResult:
     editing_suggestions: List[str]
     reading_prompts: List[str]
     metrics: Dict
+
+
+def find_logo_file() -> str | None:
+    candidates = ["logo.png", "logo.jpg", "logo.jpeg", "2.jpeg", "2.jpg"]
+    for name in candidates:
+        if Path(name).exists():
+            return name
+    return None
 
 
 def load_image_from_upload(uploaded_file) -> Image.Image:
@@ -138,7 +156,7 @@ def estimate_center_of_mass(gray: np.ndarray) -> Tuple[float, float]:
 def estimate_symmetry(gray: np.ndarray) -> float:
     h, w = gray.shape
     left = gray[:, : w // 2]
-    right = gray[:, w - left.shape[1] :]
+    right = gray[:, w - left.shape[1]:]
     right = np.fliplr(right)
     diff = np.abs(left.astype(np.float32) - right.astype(np.float32)).mean() / 255.0
     return float(max(0.0, 1.0 - diff))
@@ -195,8 +213,17 @@ def extract_metrics(img: Image.Image) -> ImageMetrics:
     visual_noise_score = estimate_visual_noise(gray)
     thirds_alignment_score = estimate_thirds_alignment(center_of_mass_x, center_of_mass_y)
     negative_space_score = estimate_negative_space(gray)
-    tonal_balance_score = estimate_tonal_balance(brightness_mean, brightness_std, highlight_clip_ratio, shadow_clip_ratio)
-    dynamic_tension_score = estimate_dynamic_tension(center_of_mass_x, center_of_mass_y, symmetry_score)
+    tonal_balance_score = estimate_tonal_balance(
+        brightness_mean,
+        brightness_std,
+        highlight_clip_ratio,
+        shadow_clip_ratio,
+    )
+    dynamic_tension_score = estimate_dynamic_tension(
+        center_of_mass_x,
+        center_of_mass_y,
+        symmetry_score,
+    )
 
     return ImageMetrics(
         width=img.width,
@@ -220,17 +247,17 @@ def extract_metrics(img: Image.Image) -> ImageMetrics:
     )
 
 
-def _focus_band(metrics: ImageMetrics) -> float:
-    return clamp01(1 - abs((math.log1p(metrics.focus_score) - 4.2) / 3.0))
-
-
 def score_first_impact(metrics: ImageMetrics) -> float:
-    return clamp01(0.35 * _focus_band(metrics) + 0.35 * metrics.dynamic_tension_score + 0.30 * metrics.tonal_balance_score)
+    focus = clamp01(1 - abs((math.log1p(metrics.focus_score) - 4.2) / 3.0))
+    tension = metrics.dynamic_tension_score
+    tonal = metrics.tonal_balance_score
+    return clamp01(0.35 * focus + 0.35 * tension + 0.30 * tonal)
 
 
 def score_technical(metrics: ImageMetrics) -> float:
     clip_penalty = min(1.0, (metrics.highlight_clip_ratio + metrics.shadow_clip_ratio) * 8)
-    return clamp01(0.4 * metrics.tonal_balance_score + 0.35 * _focus_band(metrics) + 0.25 * (1 - clip_penalty))
+    focus = clamp01(1 - abs((math.log1p(metrics.focus_score) - 4.2) / 3.0))
+    return clamp01(0.4 * metrics.tonal_balance_score + 0.35 * focus + 0.25 * (1 - clip_penalty))
 
 
 def score_composition(metrics: ImageMetrics) -> float:
@@ -243,16 +270,25 @@ def score_composition(metrics: ImageMetrics) -> float:
 
 
 def score_hierarchy(metrics: ImageMetrics) -> float:
+    focus = clamp01(1 - abs((math.log1p(metrics.focus_score) - 4.2) / 3.0))
     edge_balance = clamp01(1 - abs(metrics.edge_density - 0.10) / 0.18)
-    return clamp01(0.45 * _focus_band(metrics) + 0.35 * edge_balance + 0.20 * metrics.thirds_alignment_score)
+    return clamp01(0.45 * focus + 0.35 * edge_balance + 0.20 * metrics.thirds_alignment_score)
 
 
 def score_narrative(metrics: ImageMetrics) -> float:
-    return clamp01(0.35 * score_hierarchy(metrics) + 0.35 * score_composition(metrics) + 0.30 * metrics.tonal_balance_score)
+    return clamp01(
+        0.35 * score_hierarchy(metrics)
+        + 0.35 * score_composition(metrics)
+        + 0.30 * metrics.tonal_balance_score
+    )
 
 
 def score_abstraction(metrics: ImageMetrics) -> float:
-    return clamp01(0.35 * metrics.symmetry_score + 0.30 * metrics.negative_space_score + 0.35 * metrics.tonal_balance_score)
+    return clamp01(
+        0.35 * metrics.symmetry_score
+        + 0.30 * metrics.negative_space_score
+        + 0.35 * metrics.tonal_balance_score
+    )
 
 
 def score_simplification(metrics: ImageMetrics) -> float:
@@ -261,7 +297,12 @@ def score_simplification(metrics: ImageMetrics) -> float:
 
 
 def score_intention(metrics: ImageMetrics) -> float:
-    return clamp01(0.30 * score_composition(metrics) + 0.25 * score_hierarchy(metrics) + 0.25 * score_simplification(metrics) + 0.20 * score_technical(metrics))
+    return clamp01(
+        0.30 * score_composition(metrics)
+        + 0.25 * score_hierarchy(metrics)
+        + 0.25 * score_simplification(metrics)
+        + 0.20 * score_technical(metrics)
+    )
 
 
 def build_rubric_scores(metrics: ImageMetrics) -> Dict[str, float]:
@@ -392,212 +433,260 @@ def score_label(score: float) -> str:
     return "Çok Güçlü"
 
 
+# ============================================================
+# Arayüz
+# ============================================================
+
 st.markdown(
     """
     <style>
     .stApp {
         background:
-        radial-gradient(circle at top left, rgba(207,171,94,0.16), transparent 30%),
-        radial-gradient(circle at bottom right, rgba(255,255,255,0.08), transparent 20%),
-        #0e0f11;
-        color: #f2f2f2;
+            radial-gradient(circle at top left, rgba(212,175,55,0.08), transparent 28%),
+            radial-gradient(circle at bottom right, rgba(212,175,55,0.05), transparent 24%),
+            linear-gradient(180deg, #050505 0%, #0d0d0d 100%);
+        color: #f3f1ea;
     }
+
     .block-container {
-        max-width: 1180px;
         padding-top: 2rem;
-        padding-bottom: 4rem;
+        padding-bottom: 3rem;
+        max-width: 1180px;
     }
+
+    section[data-testid="stSidebar"] {
+        background: #0a0a0a;
+        border-right: 1px solid rgba(212,175,55,.16);
+    }
+
     .hero {
-        padding: 1.6rem 1.6rem 1.4rem 1.6rem;
-        border: 1px solid rgba(255,255,255,.10);
+        padding: 1.8rem;
+        border: 1px solid rgba(212,175,55,.18);
         border-radius: 24px;
-        background: linear-gradient(135deg, rgba(255,255,255,.06), rgba(181,144,72,.08));
+        background: linear-gradient(135deg, rgba(255,255,255,.04), rgba(212,175,55,.08));
+        box-shadow: 0 14px 40px rgba(0,0,0,.35);
         margin-bottom: 1rem;
-        box-shadow: 0 18px 50px rgba(0,0,0,.22);
     }
-    .hero h1 { margin: 0; font-size: 3rem; line-height: 1.02; }
-    .hero p { margin-top: .7rem; font-size: 1.02rem; opacity: .92; max-width: 780px; }
-    .soft-card, .manifesto-card, .footer-card {
-        border: 1px solid rgba(255,255,255,.10);
-        border-radius: 20px;
+
+    .hero h1 {
+        margin: 0;
+        font-size: 2.8rem;
+        line-height: 1.05;
+        color: #f5ebc8;
+        letter-spacing: 0.2px;
+    }
+
+    .hero p {
+        margin-top: .8rem;
+        font-size: 1.05rem;
+        color: rgba(255,255,255,.84);
+        line-height: 1.6;
+    }
+
+    .soft-card {
+        border: 1px solid rgba(212,175,55,.12);
+        border-radius: 18px;
         padding: 1rem 1rem .85rem 1rem;
-        background: rgba(255,255,255,.04);
-        margin-bottom: .85rem;
-        backdrop-filter: blur(8px);
+        background: rgba(255,255,255,.03);
+        margin-bottom: .9rem;
+        box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
-    .manifesto-card { min-height: 195px; }
-    .section-title { font-size: 1.12rem; font-weight: 700; margin-bottom: .45rem; }
-    .mini-note { font-size: .96rem; opacity: .88; }
+
+    .section-title {
+        font-size: 1.16rem;
+        font-weight: 700;
+        margin-bottom: .45rem;
+        color: #f1d67a;
+    }
+
+    .mini-note {
+        font-size: .96rem;
+        opacity: .84;
+        line-height: 1.65;
+    }
+
     .score-box {
-        border: 1px solid rgba(255,255,255,.12);
-        border-radius: 22px;
+        border: 1px solid rgba(212,175,55,.14);
+        border-radius: 18px;
         padding: 1rem 1rem .9rem 1rem;
-        background: rgba(255,255,255,.045);
-        box-shadow: 0 12px 32px rgba(0,0,0,.18);
+        background: rgba(255,255,255,.03);
+        box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
+
     .quote-box {
-        border-left: 4px solid rgba(207,171,94,.95);
+        border-left: 4px solid rgba(212,175,55,.92);
         padding: .95rem 1rem;
-        background: rgba(207,171,94,.12);
+        background: rgba(212,175,55,.08);
         border-radius: 0 14px 14px 0;
         margin: .5rem 0 1rem 0;
+        color: #f8efcf;
     }
-    .tagline {
+
+    .hero-badge {
         display: inline-block;
-        margin-top: .4rem;
-        padding: .28rem .65rem;
+        margin-top: .85rem;
+        padding: .4rem .8rem;
         border-radius: 999px;
-        background: rgba(207,171,94,.14);
-        border: 1px solid rgba(207,171,94,.25);
-        font-size: .85rem;
+        border: 1px solid rgba(212,175,55,.20);
+        background: rgba(212,175,55,.08);
+        color: #f0d782;
+        font-size: .92rem;
     }
-    .share-box {
-        padding: 1rem 1rem .9rem 1rem;
-        border-radius: 18px;
-        border: 1px dashed rgba(207,171,94,.45);
-        background: rgba(207,171,94,.06);
+
+    .upload-label {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #f1d67a;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+logo_file = find_logo_file()
+
 with st.sidebar:
+    if logo_file:
+        st.image(logo_file, use_container_width=True)
     st.markdown("## ÇOFSAT")
     st.markdown("### Temel soru")
     st.warning(CULTURE["temel_soru"])
-    st.markdown("### Yaklaşım")
-    for q in CULTURE["okuma_sorulari"][:4]:
+    st.markdown("### Fotoğrafa yaklaşım")
+    for q in CULTURE["okuma_sorulari"][:3]:
         st.markdown(f"- {q}")
     st.markdown(
         "<div class='mini-note'>Bu sistem sahnenin niyetini doğrudan bilemez; teknik ve yapısal izlerden yaklaşık bir okuma üretir.</div>",
         unsafe_allow_html=True,
     )
 
-st.markdown(
-    """
-    <div class="hero">
-        <h1>ÇOFSAT Web</h1>
-        <div class="tagline">Fotoğrafı yalnızca beğenmek için değil, durup okumak için.</div>
-        <p>
-            ÇOFSAT Web, fotoğrafı teknik ölçümlerle tarar; ardından kadraj, niyet, anlatı, sadelik ve görsel dil açısından yorumlar.
-            Amaç hüküm vermek değil, birlikte daha derin görmek.
-        </p>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+header_left, header_right = st.columns([0.18, 0.82])
 
-intro1, intro2 = st.columns([1.15, 1])
-with intro1:
+with header_left:
+    if logo_file:
+        st.image(logo_file, use_container_width=True)
+
+with header_right:
+    st.markdown(
+        """
+        <div class="hero">
+            <h1>ÇOFSAT Fotoğraf Ön Değerlendirme</h1>
+            <p>
+                Fotoğrafı sadece beğenmek için değil, durup okumak için tasarlanmış
+                ÇOFSAT temelli otomatik değerlendirme sistemi.
+            </p>
+            <div class="hero-badge">Kadraj · Niyet · Anlatı · Sadelik · Görsel Dil</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+col_intro_1, col_intro_2 = st.columns([1.15, 1])
+
+with col_intro_1:
     st.markdown(
         """
         <div class="soft-card">
             <div class="section-title">Bu sistem ne yapar?</div>
             <div class="mini-note">
-                Fotoğrafı teknik açıdan ölçer; sonra bunu ÇOFSAT’ın niyet, kadraj, anlatı, sadelik ve görsel dil anlayışıyla yorumlar.
+                Fotoğrafı teknik açıdan ölçer; sonra bunu ÇOFSAT’ın niyet, kadraj,
+                anlatı, sadelik ve görsel dil anlayışıyla yorumlar.
                 Amaç hüküm vermek değil, görmeyi derinleştirmektir.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-with intro2:
+
+with col_intro_2:
     st.markdown(
         f"""
         <div class="quote-box">
-            <strong>Manifesto sorusu</strong><br>{CULTURE['temel_soru']}
+            <strong>Manifesto sorusu:</strong><br>{CULTURE['temel_soru']}
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-m1, m2, m3 = st.columns(3)
-with m1:
-    st.markdown("<div class='manifesto-card'><div class='section-title'>Niyet</div><div class='mini-note'>Fotoğraf neden var sorusunu merkezde tutar. Tesadüften çok karar okumaya çalışır.</div></div>", unsafe_allow_html=True)
-with m2:
-    st.markdown("<div class='manifesto-card'><div class='section-title'>Kadraj</div><div class='mini-note'>Gözün nereye gittiğini, neyin içeride kaldığını ve neyin dışarıda bırakıldığını izler.</div></div>", unsafe_allow_html=True)
-with m3:
-    st.markdown("<div class='manifesto-card'><div class='section-title'>Ton</div><div class='mini-note'>Işık ve tonları efekt gibi değil, anlamı taşıyan yapı taşları gibi okumaya çalışır.</div></div>", unsafe_allow_html=True)
+st.markdown("<div class='upload-label'>Fotoğraf yükleyin</div>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader(
-    "Fotoğraf yükleyin",
+    label="",
     type=["jpg", "jpeg", "png", "webp", "tif", "tiff"],
     help="JPG, JPEG, PNG, WEBP, TIF ve TIFF desteklenir.",
+    label_visibility="collapsed",
 )
 
 if uploaded_file is not None:
     image = load_image_from_upload(uploaded_file)
     result = critique_image(image)
 
-    tab1, tab2, tab3 = st.tabs(["Okuma", "Rubrik", "Teknik İzler"])
+    col1, col2 = st.columns([1.05, 0.95])
 
-    with tab1:
-        col1, col2 = st.columns([1.08, 0.92])
-        with col1:
-            st.image(image, caption=uploaded_file.name, use_container_width=True)
-        with col2:
-            st.markdown("<div class='score-box'>", unsafe_allow_html=True)
-            st.metric("ÇOFSAT Skoru", f"{result.total_score}/100", score_label(result.total_score))
-            st.progress(result.total_score / 100)
-            st.markdown("#### Kısa okuma")
-            st.info(result.critique_short)
-            st.markdown("</div>", unsafe_allow_html=True)
+    with col1:
+        st.image(image, caption=uploaded_file.name, use_container_width=True)
 
-        st.markdown("---")
-        st.markdown("## Derin okuma")
-        st.write(result.critique_long)
+    with col2:
+        st.markdown("<div class='score-box'>", unsafe_allow_html=True)
+        st.metric("ÇOFSAT Skoru", f"{result.total_score}/100", score_label(result.total_score))
+        st.progress(result.total_score / 100)
+        st.markdown("#### Kısa okuma")
+        st.info(result.critique_short)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("### Güçlü yanlar")
-            for item in result.strengths:
-                st.markdown(f"- {item}")
-        with c2:
-            st.markdown("### Zayıf yanlar")
-            for item in result.weaknesses:
-                st.markdown(f"- {item}")
+    st.markdown("---")
+    st.markdown("## Derin Okuma")
+    st.write(result.critique_long)
 
-        q1, q2 = st.columns(2)
-        with q1:
-            st.markdown("### Okumayı derinleştiren sorular")
-            for item in result.reading_prompts:
-                st.markdown(f"- {item}")
-        with q2:
-            st.markdown("### Düzenleme yönleri")
-            for item in result.editing_suggestions:
-                st.markdown(f"- {item}")
+    c1, c2 = st.columns(2)
 
-    with tab2:
-        st.markdown("## Rubrik dağılımı")
-        score_items = list(result.rubric_scores.items())
-        row1 = st.columns(4)
-        for i, (key, val) in enumerate(score_items[:4]):
-            row1[i].metric(RUBRIC_LABELS[key], f"{val}")
-        row2 = st.columns(4)
-        for i, (key, val) in enumerate(score_items[4:]):
-            row2[i].metric(RUBRIC_LABELS[key], f"{val}")
+    with c1:
+        st.markdown("### Güçlü yanlar")
+        for item in result.strengths:
+            st.markdown(f"- {item}")
 
-    with tab3:
-        st.markdown("## Teknik metrikler")
+    with c2:
+        st.markdown("### Zayıf yanlar")
+        for item in result.weaknesses:
+            st.markdown(f"- {item}")
+
+    st.markdown("---")
+    st.markdown("## Rubrik")
+
+    score_items = list(result.rubric_scores.items())
+    row1 = st.columns(4)
+    for i, (key, val) in enumerate(score_items[:4]):
+        row1[i].metric(RUBRIC_LABELS[key], f"{val}")
+
+    row2 = st.columns(4)
+    for i, (key, val) in enumerate(score_items[4:]):
+        row2[i].metric(RUBRIC_LABELS[key], f"{val}")
+
+    st.markdown("---")
+    q1, q2 = st.columns(2)
+
+    with q1:
+        st.markdown("## Okumayı derinleştiren sorular")
+        for item in result.reading_prompts:
+            st.markdown(f"- {item}")
+
+    with q2:
+        st.markdown("## Düzenleme önerileri")
+        for item in result.editing_suggestions:
+            st.markdown(f"- {item}")
+
+    with st.expander("Teknik metrikler"):
         st.json(result.metrics)
+
 else:
     st.markdown(
         """
         <div class="soft-card">
             <div class="section-title">Başlamak için bir fotoğraf yükleyin</div>
             <div class="mini-note">
-                Fotoğrafı yüklediğiniz anda sistem önce görsel yapıyı ölçer, sonra ÇOFSAT diline yakın bir okuma üretir.
+                Fotoğrafı yüklediğiniz anda sistem önce görsel yapıyı ölçer,
+                sonra ÇOFSAT diline yakın bir okuma üretir.
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
-
-st.markdown("---")
-st.markdown(
-    """
-   
-    """,
-    unsafe_allow_html=True,
-)
