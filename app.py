@@ -89,6 +89,27 @@ MODE_PROFILES = {
     },
 }
 
+EDITOR_MODES = {
+    "Yapıcı": {
+        "summary_prefix": "Bu karede dikkat çekici bir yön var.",
+        "improve_prefix": "Biraz daha güçlenmesi için şu alanlar öne çıkıyor:",
+        "softener": "biraz",
+        "ending": "Buradaki amaç kusur bulmak değil, kareyi bir adım ileri taşımak.",
+    },
+    "Dürüst": {
+        "summary_prefix": "Bu kare bazı yerlerde iyi çalışıyor, bazı yerlerde ise net kararlar istiyor.",
+        "improve_prefix": "Gelişime açık başlıca alanlar şunlar:",
+        "softener": "",
+        "ending": "Burada asıl mesele neyin çalıştığını ve neyin çalışmadığını net görebilmek.",
+    },
+    "Sert": {
+        "summary_prefix": "Bu kare potansiyel taşısa da bazı temel kararlar henüz yerine tam oturmamış görünüyor.",
+        "improve_prefix": "En net kırılmalar şuralarda görünüyor:",
+        "softener": "",
+        "ending": "Bu tonu seçmek yargılamak için değil, fotoğrafı daha açık görmek içindir.",
+    },
+}
+
 
 @dataclass
 class ImageMetrics:
@@ -390,6 +411,16 @@ def score_band(score_100: float) -> str:
     return "Çok Güçlü"
 
 
+def tone_text(text: str, editor_mode: str) -> str:
+    if editor_mode == "Yapıcı":
+        return text
+    if editor_mode == "Dürüst":
+        return text.replace("biraz ", "").replace("nispeten ", "")
+    if editor_mode == "Sert":
+        return text.replace("biraz ", "").replace("nispeten ", "").replace("olabilir", "gerekiyor")
+    return text
+
+
 def overall_tag_from_scores(scores_100: Dict[str, float], mode: str) -> str:
     if mode == "Sokak":
         if scores_100["anlati_gucu"] >= 75:
@@ -422,7 +453,7 @@ def overall_tag_from_scores(scores_100: Dict[str, float], mode: str) -> str:
     return "Potansiyeli olan kare"
 
 
-def pick_strengths(scores_100: Dict[str, float], mode: str) -> List[str]:
+def pick_strengths(scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
     ordered = sorted(scores_100.items(), key=lambda x: x[1], reverse=True)
     common = {
         "ilk_etki": "Fotoğraf ilk bakışta kendine alan açabiliyor; izleyiciyi tamamen dışarıda bırakmıyor.",
@@ -441,7 +472,7 @@ def pick_strengths(scores_100: Dict[str, float], mode: str) -> List[str]:
             "kompozisyon": "Sahne içindeki katmanlar ve şehir akışı fotoğrafın enerjisini destekliyor.",
         },
         "Portre": {
-            "odak_ve_hiyerarsi": "Yüz, bakış veya beden dili izleyiciyle bağ kurabiliyor.",
+            "odak_ve_hiyerarsi": "Yüz, bakış ya da beden dili izleyiciyle bağ kurabiliyor.",
             "anlati_gucu": "Portrede yalnızca görünüş değil, bir ruh hali de hissediliyor.",
         },
         "Belgesel": {
@@ -456,10 +487,10 @@ def pick_strengths(scores_100: Dict[str, float], mode: str) -> List[str]:
 
     mapping = common.copy()
     mapping.update(mode_extras.get(mode, {}))
-    return [mapping[k] for k, _ in ordered[:3]]
+    return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:3]]
 
 
-def pick_development_areas(scores_100: Dict[str, float], mode: str) -> List[str]:
+def pick_development_areas(scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
     ordered = sorted(scores_100.items(), key=lambda x: x[1])
     common = {
         "ilk_etki": "İlk bakışta izleyiciyi durduracak kadar güçlü bir giriş henüz tam kurulamıyor.",
@@ -493,7 +524,7 @@ def pick_development_areas(scores_100: Dict[str, float], mode: str) -> List[str]
 
     mapping = common.copy()
     mapping.update(mode_extras.get(mode, {}))
-    return [mapping[k] for k, _ in ordered[:3]]
+    return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:3]]
 
 
 def build_reading_prompts(scores_100: Dict[str, float], mode: str) -> List[str]:
@@ -533,7 +564,7 @@ def build_reading_prompts(scores_100: Dict[str, float], mode: str) -> List[str]:
     return [merged[k] for k, _ in ordered[:3]]
 
 
-def build_shooting_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str) -> List[str]:
+def build_shooting_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
     notes: List[str] = []
 
     if scores_100["odak_ve_hiyerarsi"] < 60:
@@ -554,15 +585,15 @@ def build_shooting_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mo
     elif mode == "Soyut":
         notes.append("Soyut çekimlerde biçimsel sadelik ve tekrar ilişkisini biraz daha kararlı kurmak etkiyi büyütür.")
 
-    # benzersiz ve kısa tut
     unique = []
     for n in notes:
-        if n not in unique:
-            unique.append(n)
+        t = tone_text(n, editor_mode)
+        if t not in unique:
+            unique.append(t)
     return unique[:4] if unique else ["Bu kare küçük kararlarla daha da güçlenebilir."]
 
 
-def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str) -> List[str]:
+def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
     notes: List[str] = []
 
     if metrics.highlight_clip_ratio > 0.03:
@@ -585,49 +616,53 @@ def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mod
 
     unique = []
     for n in notes:
-        if n not in unique:
-            unique.append(n)
+        t = tone_text(n, editor_mode)
+        if t not in unique:
+            unique.append(t)
     return unique[:4] if unique else ["Bu kare için aşırı filtre yerine küçük ve bilinçli ton düzenlemeleri en iyi sonucu verir."]
 
 
-def build_first_reading(total: float, scores_100: Dict[str, float], mode: str) -> str:
+def build_first_reading(total: float, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
     level = score_band(total).lower()
 
     if mode == "Sokak":
         if scores_100["ilk_etki"] >= 75:
-            return f"İlk anda bu kare bir sokak karşılaşması duygusu kurabiliyor. Şehrin akışı içinde kendine yer açan, {level} düzeyin üzerinde bir ilk temas hissi var."
-        return "İlk bakışta sahne hissediliyor; ancak sokak fotoğrafının vurucu an etkisi biraz daha güçlenirse kare daha akılda kalıcı olabilir."
-
-    if mode == "Portre":
+            text = f"İlk anda bu kare bir sokak karşılaşması duygusu kurabiliyor. Şehrin akışı içinde kendine yer açan, {level} düzeyin üzerinde bir ilk temas hissi var."
+        else:
+            text = "İlk bakışta sahne hissediliyor; ancak sokak fotoğrafının vurucu an etkisi biraz daha güçlenirse kare daha akılda kalıcı olabilir."
+    elif mode == "Portre":
         if scores_100["anlati_gucu"] >= 75:
-            return f"İlk anda portrenin duygusal alanı açılıyor. Yüz, bakış ya da beden dili izleyiciyle {level} düzeye yaklaşan bir bağ kurabiliyor."
-        return "İlk anda özne görülüyor; fakat portreyle kurulan duygusal temas biraz daha derinleşirse kare daha etkili hale gelebilir."
-
-    if mode == "Belgesel":
+            text = f"İlk anda portrenin duygusal alanı açılıyor. Yüz, bakış ya da beden dili izleyiciyle {level} düzeye yaklaşan bir bağ kurabiliyor."
+        else:
+            text = "İlk anda özne görülüyor; fakat portreyle kurulan duygusal temas biraz daha derinleşirse kare daha etkili hale gelebilir."
+    elif mode == "Belgesel":
         if scores_100["niyet_tutarliligi"] >= 75:
-            return f"İlk anda kare yalnızca estetik değil; bir bağlam ve tanıklık duygusu da taşıyor. Bu belgesel okuma için çok değerli bir başlangıç."
-        return "İlk bakışta sahnenin bir anlamı olduğu hissediliyor; bağlam biraz daha belirginleşirse belgesel gücü artabilir."
-
-    if mode == "Soyut":
+            text = "İlk anda kare yalnızca estetik değil; bir bağlam ve tanıklık duygusu da taşıyor. Bu belgesel okuma için çok değerli bir başlangıç."
+        else:
+            text = "İlk bakışta sahnenin bir anlamı olduğu hissediliyor; bağlam biraz daha belirginleşirse belgesel gücü artabilir."
+    elif mode == "Soyut":
         if scores_100["gorsel_dil"] >= 75:
-            return "İlk anda görüntü nesne aratmıyor; biçim, ton ve yüzey kendi başına bir etki alanı kurabiliyor."
-        return "İlk anda biçimsel bir ilgi doğuyor; görsel dil biraz daha netleşirse soyut etki çok daha güçlü olabilir."
+            text = "İlk anda görüntü nesne aratmıyor; biçim, ton ve yüzey kendi başına bir etki alanı kurabiliyor."
+        else:
+            text = "İlk anda biçimsel bir ilgi doğuyor; görsel dil biraz daha netleşirse soyut etki çok daha güçlü olabilir."
+    else:
+        text = "İlk bakışta fotoğraf bir niyet hissi taşıyor."
 
-    return "İlk bakışta fotoğraf bir niyet hissi taşıyor."
+    return tone_text(text, editor_mode)
 
 
-def build_structural_reading(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str) -> str:
+def build_structural_reading(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
     parts = []
 
     if scores_100["kompozisyon"] >= 70:
         parts.append("kadrajın iskeleti genel olarak toparlanmış")
     else:
-        parts.append("kadrajın iskeleti biraz daha disiplin isteyebilir")
+        parts.append("kadrajın iskeleti daha fazla disiplin istiyor")
 
     if scores_100["odak_ve_hiyerarsi"] >= 70:
         parts.append("gözün tutunacağı alan büyük ölçüde belli")
     else:
-        parts.append("odak ve hiyerarşi biraz daha netleşirse okuma rahatlar")
+        parts.append("odak ve hiyerarşi daha netleşirse okuma rahatlar")
 
     if scores_100["sadelik"] >= 65:
         parts.append("görsel yük büyük ölçüde kontrol altında")
@@ -637,7 +672,7 @@ def build_structural_reading(metrics: ImageMetrics, scores_100: Dict[str, float]
     if metrics.tonal_balance_score >= 0.65:
         parts.append("ton dengesi fotoğrafa destek veriyor")
     else:
-        parts.append("ton yapısı biraz daha rafine edilirse kare daha olgun görünür")
+        parts.append("ton yapısı daha rafine edilirse kare daha olgun görünür")
 
     if mode == "Sokak":
         ending = " Özellikle an, katman ve sahne akışı sokak okumasında belirleyici görünüyor."
@@ -648,26 +683,33 @@ def build_structural_reading(metrics: ImageMetrics, scores_100: Dict[str, float]
     else:
         ending = " Özellikle biçimsel ritim ve görsel dilin tutarlılığı soyut okumada daha fazla öne çıkıyor."
 
-    return "Yapısal olarak bakıldığında " + ", ".join(parts) + "." + ending
+    return tone_text("Yapısal olarak bakıldığında " + ", ".join(parts) + "." + ending, editor_mode)
 
 
-def build_editorial_result(total: float, scores_100: Dict[str, float], mode: str) -> str:
+def build_editorial_result(total: float, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
     if total >= 80:
-        return f"Genel sonuç olarak bu {mode.lower()} kare yalnızca doğru kararlar içermiyor; aynı zamanda kendi dilini hissettirebiliyor. Editöryel olarak güçlü bir zemini var."
-    if total >= 65:
-        return f"Genel sonuç olarak bu {mode.lower()} kare güçlü bir potansiyel taşıyor. Doğru yerlere küçük dokunuşlar gelirse etkisi belirgin biçimde artar."
-    if total >= 45:
-        return f"Genel sonuç olarak karede iyi bir niyet var. Şimdilik bazı kararlar tam yerine oturmamış olsa da üzerinde düşünülmüş bir yön hissediliyor."
-    return f"Genel sonuç olarak bu {mode.lower()} kare henüz tam açılmamış görünüyor. Yine de burada önemli olan eksik değil; hangi kararların fotoğrafı ileri taşıyacağını görebilmektir."
+        text = f"Genel sonuç olarak bu {mode.lower()} kare yalnızca doğru kararlar içermiyor; aynı zamanda kendi dilini hissettirebiliyor. Editöryel olarak güçlü bir zemini var."
+    elif total >= 65:
+        text = f"Genel sonuç olarak bu {mode.lower()} kare güçlü bir potansiyel taşıyor. Doğru yerlere küçük dokunuşlar gelirse etkisi belirgin biçimde artar."
+    elif total >= 45:
+        text = f"Genel sonuç olarak karede iyi bir niyet var. Şimdilik bazı kararlar tam yerine oturmamış olsa da üzerinde düşünülmüş bir yön hissediliyor."
+    else:
+        text = f"Genel sonuç olarak bu {mode.lower()} kare henüz tam açılmamış görünüyor. Yine de burada önemli olan eksik değil; hangi kararların fotoğrafı ileri taşıyacağını görebilmektir."
+
+    ending = " " + EDITOR_MODES[editor_mode]["ending"]
+    return tone_text(text + ending, editor_mode)
 
 
-def build_editor_summary(total: float, strengths: List[str], dev_areas: List[str], mode: str) -> str:
+def build_editor_summary(total: float, strengths: List[str], dev_areas: List[str], mode: str, editor_mode: str) -> str:
     level = score_band(total)
-    return (
-        f"Bu **{mode.lower()}** kare şu an için **{level}** bir potansiyel gösteriyor. "
+    prefix = EDITOR_MODES[editor_mode]["summary_prefix"]
+    improve = EDITOR_MODES[editor_mode]["improve_prefix"]
+    text = (
+        f"{prefix} Bu **{mode.lower()}** kare şu an için **{level}** bir potansiyel gösteriyor. "
         f"En güçlü taraflarından biri şu: {strengths[0].lower()} "
-        f"Gelişime en açık yer ise şu görünüyor: {dev_areas[0].lower()}"
+        f"{improve} {dev_areas[0].lower()}"
     )
+    return tone_text(text, editor_mode)
 
 
 def build_tags(scores_100: Dict[str, float], total: float, mode: str) -> List[str]:
@@ -701,14 +743,14 @@ def build_tags(scores_100: Dict[str, float], total: float, mode: str) -> List[st
     return unique[:5]
 
 
-def critique_image(img: Image.Image, mode: str) -> CritiqueResult:
+def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueResult:
     metrics = extract_metrics(img)
     scores = build_rubric_scores(metrics, mode)
     total = weighted_total(scores)
     scores_100 = {k: round(v * 100, 1) for k, v in scores.items()}
 
-    strengths = pick_strengths(scores_100, mode)
-    dev_areas = pick_development_areas(scores_100, mode)
+    strengths = pick_strengths(scores_100, mode, editor_mode)
+    dev_areas = pick_development_areas(scores_100, mode, editor_mode)
 
     return CritiqueResult(
         total_score=total,
@@ -717,12 +759,12 @@ def critique_image(img: Image.Image, mode: str) -> CritiqueResult:
         rubric_scores=scores_100,
         strengths=strengths,
         development_areas=dev_areas,
-        editor_summary=build_editor_summary(total, strengths, dev_areas, mode),
-        first_reading=build_first_reading(total, scores_100, mode),
-        structural_reading=build_structural_reading(metrics, scores_100, mode),
-        editorial_result=build_editorial_result(total, scores_100, mode),
-        shooting_notes=build_shooting_notes(metrics, scores_100, mode),
-        editing_notes=build_editing_notes(metrics, scores_100, mode),
+        editor_summary=build_editor_summary(total, strengths, dev_areas, mode, editor_mode),
+        first_reading=build_first_reading(total, scores_100, mode, editor_mode),
+        structural_reading=build_structural_reading(metrics, scores_100, mode, editor_mode),
+        editorial_result=build_editorial_result(total, scores_100, mode, editor_mode),
+        shooting_notes=build_shooting_notes(metrics, scores_100, mode, editor_mode),
+        editing_notes=build_editing_notes(metrics, scores_100, mode, editor_mode),
         reading_prompts=build_reading_prompts(scores_100, mode),
         tags=build_tags(scores_100, total, mode),
         metrics=asdict(metrics),
@@ -772,14 +814,6 @@ st.markdown(
         background: linear-gradient(135deg, rgba(255,255,255,.04), rgba(212,175,55,.08));
         box-shadow: 0 14px 40px rgba(0,0,0,.35);
         margin-bottom: 1rem;
-        transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease;
-        animation: fadeInUp .7s ease;
-    }
-
-    .hero:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 18px 48px rgba(0,0,0,.42);
-        border-color: rgba(212,175,55,.28);
     }
 
     .hero h1 {
@@ -807,23 +841,22 @@ st.markdown(
         color: #f0d782;
         font-size: .92rem;
         font-weight: 600;
-        transition: all .25s ease;
     }
 
-    .soft-card {
-        border: 1px solid rgba(212,175,55,.12);
+    .soft-card, .score-box, .editor-card {
+        border: 1px solid rgba(212,175,55,.14);
         border-radius: 18px;
-        padding: 1rem 1rem .9rem 1rem;
+        padding: 1rem;
         background: rgba(255,255,255,.03);
-        margin-bottom: .9rem;
         box-shadow: 0 8px 24px rgba(0,0,0,.18);
+        margin-bottom: 1rem;
     }
 
-    .section-title {
-        font-size: 1.15rem;
+    .section-title, .editor-title {
+        font-size: 1.05rem;
         font-weight: 700;
-        margin-bottom: .45rem;
         color: #f1d67a;
+        margin-bottom: .45rem;
     }
 
     .mini-note {
@@ -831,15 +864,6 @@ st.markdown(
         line-height: 1.7;
         color: rgba(255,255,255,.98) !important;
         opacity: 1 !important;
-    }
-
-    .score-box, .editor-card {
-        border: 1px solid rgba(212,175,55,.14);
-        border-radius: 18px;
-        padding: 1rem;
-        background: rgba(255,255,255,.03);
-        box-shadow: 0 8px 24px rgba(0,0,0,.18);
-        margin-bottom: 1rem;
     }
 
     .quote-box {
@@ -869,13 +893,6 @@ st.markdown(
         margin: 0 .35rem .45rem 0;
     }
 
-    .editor-title {
-        font-size: 1.05rem;
-        font-weight: 700;
-        color: #f1d67a;
-        margin-bottom: .45rem;
-    }
-
     div[data-testid="stFileUploader"] {
         background: rgba(255,255,255,.03);
         border: 1px solid rgba(212,175,55,.12);
@@ -895,6 +912,26 @@ st.markdown(
     div[data-testid="stFileUploader"] p {
         color: #ffffff !important;
         opacity: 1 !important;
+    }
+
+    /* Upload butonunda YÜKLE yazısı */
+    div[data-testid="stFileUploader"] button {
+        position: relative !important;
+        color: transparent !important;
+        min-width: 110px !important;
+        font-weight: 700 !important;
+    }
+
+    div[data-testid="stFileUploader"] button::after {
+        content: "YÜKLE";
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.5px;
     }
 
     div[data-testid="stMetric"] {
@@ -964,7 +1001,9 @@ logo_file = find_logo_file()
 with st.sidebar:
     if logo_file:
         st.image(logo_file, use_container_width=True)
+
     st.markdown("## ÇOFSAT")
+
     st.markdown("### Değerlendirme modu")
     selected_mode = st.radio(
         label="",
@@ -974,13 +1013,28 @@ with st.sidebar:
     )
     st.markdown(f"**{selected_mode}**")
     st.markdown(MODE_PROFILES[selected_mode]["description"])
+
+    st.markdown("### Editör tonu")
+    selected_editor_mode = st.radio(
+        label="",
+        options=list(EDITOR_MODES.keys()),
+        index=0,
+        label_visibility="collapsed",
+    )
+
     st.markdown("### Temel soru")
     st.warning(CULTURE["temel_soru"])
+
     st.markdown("### Fotoğrafa yaklaşım")
     for q in CULTURE["okuma_sorulari"][:3]:
         st.markdown(f"- {q}")
+
     st.markdown(
         f"<div class='mini-note'>{MODE_PROFILES[selected_mode]['focus_hint']}</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<div class='mini-note'>{EDITOR_MODES[selected_editor_mode]['ending']}</div>",
         unsafe_allow_html=True,
     )
 
@@ -999,7 +1053,7 @@ with header_right:
                 Fotoğrafı yalnızca göstermek için değil, okumak için ele alan;
                 yapıcı, dikkatli ve insancıl bir ön değerlendirme sistemi.
             </p>
-            <div class="hero-badge">Aktif mod: {selected_mode}</div>
+            <div class="hero-badge">Aktif mod: {selected_mode} · Ton: {selected_editor_mode}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1017,7 +1071,7 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
     image = load_image_from_upload(uploaded_file)
-    result = critique_image(image, selected_mode)
+    result = critique_image(image, selected_mode, selected_editor_mode)
 
     col1, col2 = st.columns([1.02, 0.98])
 
@@ -1122,8 +1176,8 @@ else:
         <div class="soft-card">
             <div class="section-title">Başlamak için bir fotoğraf yükleyin</div>
             <div class="mini-note">
-                Aktif mod şu anda <strong>{selected_mode}</strong>. Bu modda değerlendirme;
-                {MODE_PROFILES[selected_mode]["description"].lower()}
+                Aktif mod şu anda <strong>{selected_mode}</strong>, editör tonu ise <strong>{selected_editor_mode}</strong>.
+                Bu modda değerlendirme; {MODE_PROFILES[selected_mode]["description"].lower()}
             </div>
         </div>
         """,
