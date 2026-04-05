@@ -597,16 +597,7 @@ else:
 st.markdown("---")
 st.markdown(
     """
-    <div class="footer-card">
-        <div class="section-title">ÇOFSAT grubuna nasıl açılır?</div>
-        <div class="share-box">
-            1) Bu projeyi GitHub'a yükleyin.<br>
-            2) Streamlit Community Cloud ile deploy edin.<br>
-            3) Oluşan linki ÇOFSAT grubunda paylaşın.<br><br>
-            Önerilen açılış metni:<br>
-            <em>“Arkadaşlar, ÇOFSAT Web artık açık. Fotoğrafları burada yükleyip ÇOFSAT rubriğine göre ilk okuma alabilirsiniz. Bu sistem hüküm vermek için değil, birlikte daha derin görmek için tasarlandı.”</em>
-        </div>
-    </div>
+   
     """,
     unsafe_allow_html=True,
 )
