@@ -434,7 +434,7 @@ def score_label(score: float) -> str:
 
 
 # ============================================================
-# Arayüz
+# UI
 # ============================================================
 
 st.markdown(
@@ -452,6 +452,18 @@ st.markdown(
         padding-top: 2rem;
         padding-bottom: 3rem;
         max-width: 1180px;
+        animation: fadeInUp .65s ease;
+    }
+
+    @keyframes fadeInUp {
+        0% {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     section[data-testid="stSidebar"] {
@@ -470,6 +482,14 @@ st.markdown(
         background: linear-gradient(135deg, rgba(255,255,255,.04), rgba(212,175,55,.08));
         box-shadow: 0 14px 40px rgba(0,0,0,.35);
         margin-bottom: 1rem;
+        transition: transform .28s ease, box-shadow .28s ease, border-color .28s ease;
+        animation: fadeInUp .7s ease;
+    }
+
+    .hero:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 18px 48px rgba(0,0,0,.42);
+        border-color: rgba(212,175,55,.28);
     }
 
     .hero h1 {
@@ -483,7 +503,7 @@ st.markdown(
     .hero p {
         margin-top: .8rem;
         font-size: 1.06rem;
-        color: rgba(255,255,255,.96);
+        color: rgba(255,255,255,.97);
         line-height: 1.65;
     }
 
@@ -497,6 +517,13 @@ st.markdown(
         color: #f0d782;
         font-size: .92rem;
         font-weight: 600;
+        transition: all .25s ease;
+    }
+
+    .hero-badge:hover {
+        background: rgba(212,175,55,.14);
+        border-color: rgba(212,175,55,.35);
+        color: #fff1b0;
     }
 
     .soft-card {
@@ -506,6 +533,14 @@ st.markdown(
         background: rgba(255,255,255,.03);
         margin-bottom: .9rem;
         box-shadow: 0 8px 24px rgba(0,0,0,.18);
+        transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+        animation: fadeInUp .72s ease;
+    }
+
+    .soft-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(0,0,0,.24);
+        border-color: rgba(212,175,55,.22);
     }
 
     .section-title {
@@ -518,8 +553,8 @@ st.markdown(
     .mini-note {
         font-size: .97rem;
         line-height: 1.7;
-        color: rgba(255,255,255,.96);
-        opacity: 1;
+        color: rgba(255,255,255,.98) !important;
+        opacity: 1 !important;
     }
 
     .score-box {
@@ -528,6 +563,14 @@ st.markdown(
         padding: 1rem 1rem .9rem 1rem;
         background: rgba(255,255,255,.03);
         box-shadow: 0 8px 24px rgba(0,0,0,.18);
+        transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+        animation: fadeInUp .74s ease;
+    }
+
+    .score-box:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 30px rgba(0,0,0,.24);
+        border-color: rgba(212,175,55,.22);
     }
 
     .quote-box {
@@ -537,6 +580,13 @@ st.markdown(
         border-radius: 0 14px 14px 0;
         margin: .5rem 0 1rem 0;
         color: #fff3cf;
+        transition: all .25s ease;
+        animation: fadeInUp .76s ease;
+    }
+
+    .quote-box:hover {
+        background: rgba(212,175,55,.12);
+        border-left-color: rgba(255,220,120,.95);
     }
 
     .upload-label {
@@ -551,12 +601,26 @@ st.markdown(
         border: 1px solid rgba(212,175,55,.12);
         border-radius: 18px;
         padding: .35rem .7rem .6rem .7rem;
+        transition: all .25s ease;
+        animation: fadeInUp .78s ease;
+    }
+
+    div[data-testid="stFileUploader"]:hover {
+        border-color: rgba(212,175,55,.26);
+        box-shadow: 0 10px 26px rgba(0,0,0,.18);
+        transform: translateY(-1px);
     }
 
     div[data-testid="stFileUploader"] section {
         border: 1px dashed rgba(212,175,55,.22) !important;
         border-radius: 14px !important;
         background: rgba(255,255,255,.02);
+        transition: all .25s ease;
+    }
+
+    div[data-testid="stFileUploader"] section:hover {
+        border-color: rgba(255,220,120,.35) !important;
+        background: rgba(255,255,255,.03);
     }
 
     div[data-testid="stMetric"] {
@@ -565,21 +629,32 @@ st.markdown(
         padding: .85rem;
         border-radius: 16px;
         box-shadow: 0 6px 18px rgba(0,0,0,.16);
+        transition: transform .22s ease, box-shadow .22s ease, border-color .22s ease;
+        animation: fadeInUp .8s ease;
+    }
+
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 24px rgba(0,0,0,.22);
+        border-color: rgba(212,175,55,.24);
     }
 
     div[data-testid="stMetricValue"] {
         color: #ffffff !important;
         font-weight: 800 !important;
         font-size: 1.55rem !important;
+        opacity: 1 !important;
     }
 
     div[data-testid="stMetricLabel"] {
-        color: rgba(255,255,255,.94) !important;
-        font-weight: 600 !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        opacity: 1 !important;
     }
 
     div[data-testid="stMetricDelta"] {
-        color: rgba(255,255,255,.82) !important;
+        color: #ffffff !important;
+        opacity: .92 !important;
     }
 
     div[data-testid="stProgressBar"] > div {
@@ -592,6 +667,12 @@ st.markdown(
         border: 1px solid rgba(212,175,55,.10);
         border-radius: 14px;
         padding: .4rem .7rem;
+        transition: all .25s ease;
+    }
+
+    details:hover {
+        border-color: rgba(212,175,55,.24);
+        box-shadow: 0 8px 20px rgba(0,0,0,.18);
     }
 
     h2, h3, h4 {
@@ -599,8 +680,8 @@ st.markdown(
         letter-spacing: 0.2px;
     }
 
-    p, li, label, div {
-        color: inherit;
+    p, li, label {
+        color: rgba(255,255,255,.96) !important;
     }
 
     hr {
@@ -613,7 +694,7 @@ st.markdown(
     section[data-testid="stSidebar"] h3,
     section[data-testid="stSidebar"] p,
     section[data-testid="stSidebar"] li {
-        color: rgba(255,255,255,.95);
+        color: rgba(255,255,255,.97) !important;
     }
 
     div[data-testid="stInfo"] {
@@ -625,6 +706,31 @@ st.markdown(
 
     div[data-testid="stAlert"] {
         border-radius: 14px !important;
+    }
+
+    .stButton > button {
+        background: linear-gradient(135deg, rgba(212,175,55,.18), rgba(212,175,55,.08));
+        color: #fff8dc;
+        border: 1px solid rgba(212,175,55,.28);
+        border-radius: 14px;
+        padding: 0.65rem 1rem;
+        font-weight: 700;
+        transition: all .25s ease;
+        box-shadow: 0 8px 18px rgba(0,0,0,.16);
+    }
+
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        background: linear-gradient(135deg, rgba(212,175,55,.26), rgba(212,175,55,.12));
+        border-color: rgba(255,220,120,.45);
+        box-shadow: 0 12px 26px rgba(0,0,0,.24);
+        color: #ffffff;
+    }
+
+    .stButton > button:focus,
+    .stButton > button:active {
+        outline: none !important;
+        box-shadow: 0 0 0 0.15rem rgba(212,175,55,.18);
     }
     </style>
     """,
