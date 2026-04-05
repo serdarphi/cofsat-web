@@ -20,10 +20,6 @@ st.set_page_config(
     page_icon="📷",
 )
 
-# ============================================================
-# ÇOFSAT Fotoğraf Ön Değerlendirme
-# ============================================================
-
 CULTURE = {
     "ad": "ÇOFSAT",
     "amac": "Fotoğrafı yalnızca beğeni nesnesi olmaktan çıkarıp, niyet, kadraj, anlatı ve görsel dil üzerinden okumak.",
@@ -93,19 +89,16 @@ EDITOR_MODES = {
     "Yapıcı": {
         "summary_prefix": "Bu karede dikkat çekici bir yön var.",
         "improve_prefix": "Biraz daha güçlenmesi için şu alanlar öne çıkıyor:",
-        "softener": "biraz",
         "ending": "Buradaki amaç kusur bulmak değil, kareyi bir adım ileri taşımak.",
     },
     "Dürüst": {
         "summary_prefix": "Bu kare bazı yerlerde iyi çalışıyor, bazı yerlerde ise net kararlar istiyor.",
         "improve_prefix": "Gelişime açık başlıca alanlar şunlar:",
-        "softener": "",
         "ending": "Burada asıl mesele neyin çalıştığını ve neyin çalışmadığını net görebilmek.",
     },
     "Sert": {
         "summary_prefix": "Bu kare potansiyel taşısa da bazı temel kararlar henüz yerine tam oturmamış görünüyor.",
         "improve_prefix": "En net kırılmalar şuralarda görünüyor:",
-        "softener": "",
         "ending": "Bu tonu seçmek yargılamak için değil, fotoğrafı daha açık görmek içindir.",
     },
 }
@@ -771,10 +764,6 @@ def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueRes
     )
 
 
-# ============================================================
-# UI
-# ============================================================
-
 st.markdown(
     """
     <style>
@@ -914,10 +903,16 @@ st.markdown(
         opacity: 1 !important;
     }
 
-    /* Upload butonunda YÜKLE yazısı */
+    /* Upload yazılarını gizle */
+    div[data-testid="stFileUploader"] button * {
+        opacity: 0 !important;
+        color: transparent !important;
+    }
+
     div[data-testid="stFileUploader"] button {
         position: relative !important;
         color: transparent !important;
+        font-size: 0 !important;
         min-width: 110px !important;
         font-weight: 700 !important;
     }
@@ -931,6 +926,7 @@ st.markdown(
         justify-content: center;
         color: #ffffff !important;
         font-weight: 800 !important;
+        font-size: 14px !important;
         letter-spacing: 0.5px;
     }
 
@@ -958,13 +954,6 @@ st.markdown(
     div[data-testid="stMetricDelta"] {
         color: #ffffff !important;
         opacity: .92 !important;
-    }
-
-    details {
-        background: rgba(255,255,255,.03);
-        border: 1px solid rgba(212,175,55,.10);
-        border-radius: 14px;
-        padding: .4rem .7rem;
     }
 
     h2, h3, h4 {
@@ -1166,9 +1155,6 @@ if uploaded_file is not None:
     st.markdown("## Okumayı derinleştiren sorular")
     for item in result.reading_prompts:
         st.markdown(f"- {item}")
-
-    with st.expander("Teknik metrikler"):
-        st.json(result.metrics)
 
 else:
     st.markdown(
