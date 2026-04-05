@@ -31,27 +31,23 @@ CULTURE = {
         "Bu görüntü neyi gösteriyor ve neyi dışarıda bırakıyor?",
         "Bu fotoğraf bende nasıl bir his bırakıyor?",
     ],
-    "ilkeler": [
-        "Görmek yetmez; görüntü düşünceye dönüşmelidir.",
-        "Eleştiri kişiye değil fotoğrafa yönelir.",
-        "Niyet, tesadüften değerlidir.",
-        "Kadraj sade ve bilinçli olmalıdır.",
-        "Işık ve ton gösteriş için değil anlam için kullanılmalıdır.",
-        "Görsel gürültü anlatıyı zayıflatır.",
-        "Fotoğraf hızlı tüketilen içerik değil, okunacak bir yapıdır.",
-        "Teknik kusur bazen tolere edilir; anlamsızlık tolere edilmez.",
-        "Fotoğrafın dili, etkisinden önce gelir.",
-        "Beğenilmekten önce anlaşılmak önemlidir.",
-    ],
     "rubric": {
-        "ilk_etki": 0.10,
-        "teknik_butunluk": 0.14,
-        "kompozisyon": 0.17,
-        "odak_ve_hiyerarsi": 0.14,
-        "anlati_gucu": 0.16,
-        "gorsel_dil": 0.09,
-        "sadelik": 0.10,
-        "niyet_tutarliligi": 0.10,
+        "ilk_etki": 0.08,
+        "teknik_butunluk": 0.10,
+        "kompozisyon": 0.12,
+        "odak_ve_hiyerarsi": 0.10,
+        "anlati_gucu": 0.12,
+        "gorsel_dil": 0.08,
+        "sadelik": 0.08,
+        "niyet_tutarliligi": 0.08,
+        "isik_yonu": 0.05,
+        "derinlik_hissi": 0.05,
+        "dikkat_dagitici_unsurlar": 0.05,
+        "zamanlama": 0.03,
+        "negatif_alan": 0.03,
+        "duygusal_yogunluk": 0.05,
+        "editoryal_deger": 0.03,
+        "tekrar_bakma_istegi": 0.03,
     },
 }
 
@@ -64,6 +60,14 @@ RUBRIC_LABELS = {
     "gorsel_dil": "Görsel Dil",
     "sadelik": "Sadelik",
     "niyet_tutarliligi": "Niyet Tutarlılığı",
+    "isik_yonu": "Işık Yönü",
+    "derinlik_hissi": "Derinlik Hissi",
+    "dikkat_dagitici_unsurlar": "Dikkat Dağıtan Unsurlar",
+    "zamanlama": "Zamanlama",
+    "negatif_alan": "Negatif Alan",
+    "duygusal_yogunluk": "Duygusal Yoğunluk",
+    "editoryal_deger": "Editoryal Değer",
+    "tekrar_bakma_istegi": "Tekrar Bakma İsteği",
 }
 
 MODE_PROFILES = {
@@ -124,6 +128,10 @@ class ImageMetrics:
     negative_space_score: float
     tonal_balance_score: float
     dynamic_tension_score: float
+    left_brightness: float
+    right_brightness: float
+    top_brightness: float
+    bottom_brightness: float
 
 
 @dataclass
@@ -253,16 +261,17 @@ def extract_metrics(img: Image.Image) -> ImageMetrics:
     thirds_alignment_score = estimate_thirds_alignment(center_of_mass_x, center_of_mass_y)
     negative_space_score = estimate_negative_space(gray)
     tonal_balance_score = estimate_tonal_balance(
-        brightness_mean,
-        brightness_std,
-        highlight_clip_ratio,
-        shadow_clip_ratio,
+        brightness_mean, brightness_std, highlight_clip_ratio, shadow_clip_ratio
     )
     dynamic_tension_score = estimate_dynamic_tension(
-        center_of_mass_x,
-        center_of_mass_y,
-        symmetry_score,
+        center_of_mass_x, center_of_mass_y, symmetry_score
     )
+
+    h, w = gray.shape
+    left_brightness = float(gray[:, : max(1, w // 2)].mean())
+    right_brightness = float(gray[:, w // 2 :].mean())
+    top_brightness = float(gray[: max(1, h // 2), :].mean())
+    bottom_brightness = float(gray[h // 2 :, :].mean())
 
     return ImageMetrics(
         width=img.width,
@@ -283,38 +292,15 @@ def extract_metrics(img: Image.Image) -> ImageMetrics:
         negative_space_score=negative_space_score,
         tonal_balance_score=tonal_balance_score,
         dynamic_tension_score=dynamic_tension_score,
+        left_brightness=left_brightness,
+        right_brightness=right_brightness,
+        top_brightness=top_brightness,
+        bottom_brightness=bottom_brightness,
     )
 
 
 def normalize_focus(metrics: ImageMetrics) -> float:
     return clamp01(1 - abs((math.log1p(metrics.focus_score) - 4.2) / 3.0))
-
-
-def mode_adjustment(scores: Dict[str, float], mode: str) -> Dict[str, float]:
-    adjusted = scores.copy()
-
-    if mode == "Sokak":
-        adjusted["anlati_gucu"] = clamp01(adjusted["anlati_gucu"] * 1.08)
-        adjusted["ilk_etki"] = clamp01(adjusted["ilk_etki"] * 1.05)
-        adjusted["sadelik"] = clamp01(adjusted["sadelik"] * 0.98)
-
-    elif mode == "Portre":
-        adjusted["odak_ve_hiyerarsi"] = clamp01(adjusted["odak_ve_hiyerarsi"] * 1.08)
-        adjusted["anlati_gucu"] = clamp01(adjusted["anlati_gucu"] * 1.06)
-        adjusted["kompozisyon"] = clamp01(adjusted["kompozisyon"] * 1.02)
-
-    elif mode == "Belgesel":
-        adjusted["niyet_tutarliligi"] = clamp01(adjusted["niyet_tutarliligi"] * 1.08)
-        adjusted["anlati_gucu"] = clamp01(adjusted["anlati_gucu"] * 1.06)
-        adjusted["teknik_butunluk"] = clamp01(adjusted["teknik_butunluk"] * 0.98)
-
-    elif mode == "Soyut":
-        adjusted["gorsel_dil"] = clamp01(adjusted["gorsel_dil"] * 1.12)
-        adjusted["kompozisyon"] = clamp01(adjusted["kompozisyon"] * 1.06)
-        adjusted["sadelik"] = clamp01(adjusted["sadelik"] * 1.05)
-        adjusted["anlati_gucu"] = clamp01(adjusted["anlati_gucu"] * 0.95)
-
-    return adjusted
 
 
 def score_first_impact(metrics: ImageMetrics) -> float:
@@ -375,6 +361,104 @@ def score_intention(metrics: ImageMetrics) -> float:
     )
 
 
+def score_light_direction(metrics: ImageMetrics) -> float:
+    horizontal_sep = abs(metrics.left_brightness - metrics.right_brightness) / 255.0
+    vertical_sep = abs(metrics.top_brightness - metrics.bottom_brightness) / 255.0
+    separation = max(horizontal_sep, vertical_sep)
+    return clamp01(0.4 + separation * 1.1)
+
+
+def score_depth(metrics: ImageMetrics) -> float:
+    return clamp01(
+        0.35 * metrics.dynamic_tension_score
+        + 0.30 * (1 - metrics.symmetry_score)
+        + 0.35 * clamp01(metrics.edge_density / 0.20)
+    )
+
+
+def score_distraction_control(metrics: ImageMetrics) -> float:
+    distraction = clamp01(0.55 * metrics.visual_noise_score + 0.45 * clamp01(metrics.edge_density / 0.22))
+    return clamp01(1 - distraction)
+
+
+def score_timing(metrics: ImageMetrics, mode: str) -> float:
+    base = clamp01(
+        0.45 * metrics.dynamic_tension_score
+        + 0.30 * normalize_focus(metrics)
+        + 0.25 * metrics.tonal_balance_score
+    )
+    if mode == "Sokak":
+        return clamp01(base * 1.10)
+    if mode == "Belgesel":
+        return clamp01(base * 1.05)
+    return base
+
+
+def score_negative_space_usage(metrics: ImageMetrics) -> float:
+    return clamp01(1 - abs(metrics.negative_space_score - 0.45) / 0.35)
+
+
+def score_emotional_intensity(metrics: ImageMetrics, mode: str) -> float:
+    base = clamp01(
+        0.40 * score_narrative(metrics)
+        + 0.35 * metrics.tonal_balance_score
+        + 0.25 * metrics.dynamic_tension_score
+    )
+    if mode == "Portre":
+        return clamp01(base * 1.08)
+    if mode == "Sokak":
+        return clamp01(base * 1.05)
+    return base
+
+
+def score_editorial_value(metrics: ImageMetrics) -> float:
+    return clamp01(
+        0.30 * score_composition(metrics)
+        + 0.25 * score_hierarchy(metrics)
+        + 0.20 * score_simplification(metrics)
+        + 0.25 * score_narrative(metrics)
+    )
+
+
+def score_revisit_desire(metrics: ImageMetrics, mode: str) -> float:
+    base = clamp01(
+        0.30 * score_first_impact(metrics)
+        + 0.35 * score_narrative(metrics)
+        + 0.20 * score_abstraction(metrics)
+        + 0.15 * score_editorial_value(metrics)
+    )
+    if mode == "Soyut":
+        return clamp01(base * 1.08)
+    return base
+
+
+def mode_adjustment(scores: Dict[str, float], mode: str) -> Dict[str, float]:
+    adjusted = scores.copy()
+
+    if mode == "Sokak":
+        adjusted["anlati_gucu"] = clamp01(adjusted["anlati_gucu"] * 1.08)
+        adjusted["ilk_etki"] = clamp01(adjusted["ilk_etki"] * 1.05)
+        adjusted["zamanlama"] = clamp01(adjusted["zamanlama"] * 1.12)
+
+    elif mode == "Portre":
+        adjusted["odak_ve_hiyerarsi"] = clamp01(adjusted["odak_ve_hiyerarsi"] * 1.08)
+        adjusted["anlati_gucu"] = clamp01(adjusted["anlati_gucu"] * 1.06)
+        adjusted["duygusal_yogunluk"] = clamp01(adjusted["duygusal_yogunluk"] * 1.10)
+
+    elif mode == "Belgesel":
+        adjusted["niyet_tutarliligi"] = clamp01(adjusted["niyet_tutarliligi"] * 1.08)
+        adjusted["anlati_gucu"] = clamp01(adjusted["anlati_gucu"] * 1.06)
+        adjusted["editoryal_deger"] = clamp01(adjusted["editoryal_deger"] * 1.08)
+
+    elif mode == "Soyut":
+        adjusted["gorsel_dil"] = clamp01(adjusted["gorsel_dil"] * 1.12)
+        adjusted["kompozisyon"] = clamp01(adjusted["kompozisyon"] * 1.06)
+        adjusted["negatif_alan"] = clamp01(adjusted["negatif_alan"] * 1.08)
+        adjusted["tekrar_bakma_istegi"] = clamp01(adjusted["tekrar_bakma_istegi"] * 1.08)
+
+    return adjusted
+
+
 def build_rubric_scores(metrics: ImageMetrics, mode: str) -> Dict[str, float]:
     base_scores = {
         "ilk_etki": score_first_impact(metrics),
@@ -385,6 +469,14 @@ def build_rubric_scores(metrics: ImageMetrics, mode: str) -> Dict[str, float]:
         "gorsel_dil": score_abstraction(metrics),
         "sadelik": score_simplification(metrics),
         "niyet_tutarliligi": score_intention(metrics),
+        "isik_yonu": score_light_direction(metrics),
+        "derinlik_hissi": score_depth(metrics),
+        "dikkat_dagitici_unsurlar": score_distraction_control(metrics),
+        "zamanlama": score_timing(metrics, mode),
+        "negatif_alan": score_negative_space_usage(metrics),
+        "duygusal_yogunluk": score_emotional_intensity(metrics, mode),
+        "editoryal_deger": score_editorial_value(metrics),
+        "tekrar_bakma_istegi": score_revisit_desire(metrics, mode),
     }
     return mode_adjustment(base_scores, mode)
 
@@ -418,279 +510,178 @@ def overall_tag_from_scores(scores_100: Dict[str, float], mode: str) -> str:
     if mode == "Sokak":
         if scores_100["anlati_gucu"] >= 75:
             return "Sahne duygusu güçlü"
-        if scores_100["odak_ve_hiyerarsi"] < 60:
-            return "An var, vurgu zayıf"
+        if scores_100["zamanlama"] >= 75:
+            return "Zamanlama iyi"
         return "Sokak potansiyeli yüksek"
-
     if mode == "Portre":
+        if scores_100["duygusal_yogunluk"] >= 75:
+            return "Duygusal temas güçlü"
         if scores_100["odak_ve_hiyerarsi"] >= 75:
             return "Yüz ve ifade okunuyor"
-        if scores_100["anlati_gucu"] >= 75:
-            return "Duygusal temas güçlü"
         return "Portre bağı kuruluyor"
-
     if mode == "Belgesel":
+        if scores_100["editoryal_deger"] >= 75:
+            return "Belgesel değeri güçlü"
         if scores_100["niyet_tutarliligi"] >= 75:
             return "Tanıklık hissi güçlü"
-        if scores_100["anlati_gucu"] >= 70:
-            return "Bağlam taşıyor"
-        return "Belgesel değeri var"
-
+        return "Bağlam taşıyor"
     if mode == "Soyut":
         if scores_100["gorsel_dil"] >= 75:
             return "Görsel dili güçlü"
-        if scores_100["kompozisyon"] >= 75:
-            return "Biçimsel olarak etkili"
+        if scores_100["tekrar_bakma_istegi"] >= 75:
+            return "Tekrar bakma isteği yaratıyor"
         return "Soyut potansiyel taşıyor"
-
     return "Potansiyeli olan kare"
 
 
 def pick_strengths(scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
     ordered = sorted(scores_100.items(), key=lambda x: x[1], reverse=True)
-    common = {
+    mapping = {
         "ilk_etki": "Fotoğraf ilk bakışta kendine alan açabiliyor; izleyiciyi tamamen dışarıda bırakmıyor.",
         "teknik_butunluk": "Işık, ton ve netlik tamamen rastlantısal görünmüyor; teknik yapı anlatıyı belli ölçüde taşıyabiliyor.",
         "kompozisyon": "Kadrajın iskeleti dağılmıyor; çizgi, denge ve ritim birbirini destekliyor.",
         "odak_ve_hiyerarsi": "Gözün tutunacağı yer büyük ölçüde belli; fotoğraf neye bakmamızı istediğini söyleyebiliyor.",
         "anlati_gucu": "Kare yalnızca bir görüntü değil; küçük de olsa bir duygu ve anlatı alanı açıyor.",
         "gorsel_dil": "Fotoğraf biçimsel olarak kendi dilini kurmaya çalışıyor ve bu çaba hissediliyor.",
-        "sadelik": "Gereksiz yük nispeten geri çekilmiş; fotoğraf nefes alabiliyor.",
+        "sadelik": "Gereksiz yük geri çekilmiş; fotoğraf nefes alabiliyor.",
         "niyet_tutarliligi": "Kare tesadüfi görünmüyor; arkasında belli bir niyet ve karar hissi var.",
+        "isik_yonu": "Işığın sahne içindeki yönü ve dağılımı fotoğrafın okunmasına destek veriyor.",
+        "derinlik_hissi": "Kare düz kalmıyor; katman ya da hacim hissi izleyiciyi içeri çekiyor.",
+        "dikkat_dagitici_unsurlar": "Dikkat dağıtan unsurlar büyük ölçüde kontrol altında tutulmuş.",
+        "zamanlama": "Fotoğrafın zamanlaması karenin etkisini belirgin biçimde güçlendiriyor.",
+        "negatif_alan": "Boşluk kullanımı yalnızca boş bırakmak değil; anlatıyı taşıyan bir yapı kuruyor.",
+        "duygusal_yogunluk": "Fotoğrafın duygusal yoğunluğu yapay durmadan hissedilebiliyor.",
+        "editoryal_deger": "Bu kare yalnızca hoş görünmüyor; editoryal olarak da ağırlık taşıyor.",
+        "tekrar_bakma_istegi": "Kare bir kez bakılıp geçilmiyor; izleyiciyi yeniden dönmeye davet ediyor.",
     }
-
-    mode_extras = {
-        "Sokak": {
-            "anlati_gucu": "Sahnenin içindeki an hissi korunmuş; kare yaşanmış bir karşılaşma duygusu taşıyor.",
-            "kompozisyon": "Sahne içindeki katmanlar ve şehir akışı fotoğrafın enerjisini destekliyor.",
-        },
-        "Portre": {
-            "odak_ve_hiyerarsi": "Yüz, bakış ya da beden dili izleyiciyle bağ kurabiliyor.",
-            "anlati_gucu": "Portrede yalnızca görünüş değil, bir ruh hali de hissediliyor.",
-        },
-        "Belgesel": {
-            "niyet_tutarliligi": "Fotoğraf yalnızca estetik değil; tanıklık ve bağlam duygusu da taşıyor.",
-            "anlati_gucu": "Kare, bir durumun ya da gerçeğin izini taşımaya çalışıyor.",
-        },
-        "Soyut": {
-            "gorsel_dil": "Biçim, yüzey, ton ve ritim kendi başına bir görsel alan kurabiliyor.",
-            "kompozisyon": "Soyut okuma için gerekli biçimsel denge büyük ölçüde kurulmuş.",
-        },
-    }
-
-    mapping = common.copy()
-    mapping.update(mode_extras.get(mode, {}))
-    return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:3]]
+    return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:4]]
 
 
 def pick_development_areas(scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
     ordered = sorted(scores_100.items(), key=lambda x: x[1])
-    common = {
+    mapping = {
         "ilk_etki": "İlk bakışta izleyiciyi durduracak kadar güçlü bir giriş henüz tam kurulamıyor.",
         "teknik_butunluk": "Ton, ışık veya netlik düzeyi anlamı desteklemek yerine yer yer onu zayıflatıyor.",
         "kompozisyon": "Kadrajın grafik yapısı daha bilinçli kurulursa fotoğraf çok daha güçlü okunabilir.",
-        "odak_ve_hiyerarsi": "Ana ağırlık merkezi biraz daha netleşirse göz fotoğraf içinde daha kararlı dolaşır.",
-        "anlati_gucu": "Fotoğrafın his ve anlatı tarafı var ama henüz tam açılmamış; biraz daha net bir yön istiyor.",
-        "gorsel_dil": "Biçimsel tercihlerin ortak bir dile dönüşmesi için birkaç kararın daha netleşmesi gerekiyor.",
+        "odak_ve_hiyerarsi": "Ana ağırlık merkezi daha netleşirse göz fotoğraf içinde daha kararlı dolaşır.",
+        "anlati_gucu": "Fotoğrafın his ve anlatı tarafı var ama henüz tam açılmamış; daha net bir yön istiyor.",
+        "gorsel_dil": "Biçimsel tercihlerin ortak bir dile dönüşmesi için birkaç kararın netleşmesi gerekiyor.",
         "sadelik": "Kadrajdan bazı şeyleri çıkarmak ya da geri itmek fotoğrafın anlatısını rahatlatabilir.",
         "niyet_tutarliligi": "Fotoğrafın neden var olduğu biraz daha görünür hale gelirse etkisi belirginleşir.",
+        "isik_yonu": "Işığın ana özneyi taşıma biçimi daha bilinçli kurulursa kare daha kararlı okunur.",
+        "derinlik_hissi": "Karede derinlik duygusu biraz daha güçlenirse fotoğraf daha hacimli görünür.",
+        "dikkat_dagitici_unsurlar": "Bazı bölgeler gereğinden fazla dikkat çekiyor; bunların görsel ağırlığını azaltmak iyi olabilir.",
+        "zamanlama": "Zamanlama bir kademe daha isabetli olursa sahnenin etkisi belirgin biçimde büyür.",
+        "negatif_alan": "Boşluk kullanımı biraz daha kontrollü olursa fotoğraf daha rafine görünür.",
+        "duygusal_yogunluk": "Duygusal etki var ama izleyiciye daha doğrudan geçmesi için biraz daha açıklık istiyor.",
+        "editoryal_deger": "Kare iyi bir fikir taşıyor; fakat editoryal ağırlık için birkaç kararın daha netleşmesi gerekiyor.",
+        "tekrar_bakma_istegi": "Fotoğraf ilk bakışta kendini gösteriyor ama ikinci bakış için daha fazla katman isteyebilir.",
     }
-
-    mode_extras = {
-        "Sokak": {
-            "anlati_gucu": "Sokak fotoğrafında an hissi biraz daha belirginleşirse kare daha canlı bir enerji kazanabilir.",
-            "odak_ve_hiyerarsi": "Sahnenin içindeki ana karşılaşma veya jest biraz daha net seçilirse okuma güçlenir.",
-        },
-        "Portre": {
-            "odak_ve_hiyerarsi": "Portrede yüz ve ifade biraz daha okunur hale gelirse bağ çok daha doğrudan kurulur.",
-            "sadelik": "Arka planı biraz daha sakinleştirmek portreyi nefes aldırabilir.",
-        },
-        "Belgesel": {
-            "niyet_tutarliligi": "Bağlam biraz daha görünür hale gelirse fotoğrafın tanıklık gücü artabilir.",
-            "teknik_butunluk": "Belgesel karede teknik müdahale hissi değil, sahnenin açıklığı daha önemli olabilir.",
-        },
-        "Soyut": {
-            "gorsel_dil": "Soyut yapıda biçimsel kararlar biraz daha netleşirse fotoğraf çok daha bütünlüklü görünür.",
-            "kompozisyon": "Ritim ve boşluk ilişkisi daha kararlı kurulursa soyut etki büyür.",
-        },
-    }
-
-    mapping = common.copy()
-    mapping.update(mode_extras.get(mode, {}))
-    return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:3]]
+    return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:4]]
 
 
 def build_reading_prompts(scores_100: Dict[str, float], mode: str) -> List[str]:
-    base = {
-        "ilk_etki": "Bu kare ilk anda beni gerçekten durduruyor mu, yoksa akıp gidiyor mu?",
-        "teknik_butunluk": "Işık ve ton burada anlamı mı taşıyor, yoksa sadece etki mi üretiyor?",
-        "kompozisyon": "Çizgiler, boşluklar ve kadraj dengesi fotoğrafın düşüncesine hizmet ediyor mu?",
+    prompts = {
+        "ilk_etki": "Bu kare ilk anda beni gerçekten durduruyor mu?",
         "odak_ve_hiyerarsi": "Gözüm nereye gidiyor ve orada kalmak için yeterli sebep buluyor mu?",
-        "anlati_gucu": "Bu görüntü bana ne hissettiriyor ve bunu hangi yapısal tercihler kuruyor?",
-        "gorsel_dil": "Fotoğraf kendi dili içinde tutarlı mı, yoksa parçalar ayrı ayrı mı çalışıyor?",
-        "sadelik": "Bu karede dışarıda bırakılması gereken şey ne olabilir?",
-        "niyet_tutarliligi": "Bu fotoğraf neden var ve bunu yapısıyla hissettirebiliyor mu?",
+        "anlati_gucu": "Bu görüntü bana ne hissettiriyor?",
+        "isik_yonu": "Işık burada yalnızca aydınlatıyor mu, yoksa anlam da kuruyor mu?",
+        "derinlik_hissi": "Kare düz mü kalıyor, yoksa içine girilecek bir alan açıyor mu?",
+        "dikkat_dagitici_unsurlar": "Ana öznenin önüne geçen gereksiz bir ağırlık var mı?",
+        "zamanlama": "Bu an yarım saniye önce ya da sonra çekilse etkisi değişir miydi?",
+        "negatif_alan": "Boşluk burada gerçekten işe yarıyor mu?",
+        "duygusal_yogunluk": "Fotoğraf duyguyu hissettiriyor mu, yoksa sadece işaret mi ediyor?",
+        "editoryal_deger": "Bu kare bir seçkide kendine yer açabilir mi?",
+        "tekrar_bakma_istegi": "Fotoğrafa ikinci kez dönmek için yeterli neden var mı?",
     }
-
-    mode_prompts = {
-        "Sokak": {
-            "anlati_gucu": "Bu karede gerçekten yaşanmış bir an var mı, yoksa yalnızca bir görüntü mü görüyorum?",
-            "kompozisyon": "Sahne içindeki katmanlar birbiriyle konuşuyor mu?",
-        },
-        "Portre": {
-            "odak_ve_hiyerarsi": "Yüz, bakış ve beden dili arasında en güçlü bağ nerede kuruluyor?",
-            "anlati_gucu": "Bu portre bana kişi hakkında ne hissettiriyor?",
-        },
-        "Belgesel": {
-            "niyet_tutarliligi": "Bu kare yalnızca güzel mi, yoksa bir duruma tanıklık ediyor mu?",
-            "anlati_gucu": "Bağlam fotoğrafta yeterince hissediliyor mu?",
-        },
-        "Soyut": {
-            "gorsel_dil": "Bu karede anlamı biçim mi taşıyor, yoksa görüntü yalnızca karmaşık mı kalıyor?",
-            "kompozisyon": "Ton, yüzey, tekrar ve boşluk arasında bir ritim var mı?",
-        },
-    }
-
-    merged = base.copy()
-    merged.update(mode_prompts.get(mode, {}))
     ordered = sorted(scores_100.items(), key=lambda x: x[1])
-    return [merged[k] for k, _ in ordered[:3]]
+    return [prompts[k] for k, _ in ordered[:4] if k in prompts]
 
 
 def build_shooting_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
-    notes: List[str] = []
-
+    notes = []
     if scores_100["odak_ve_hiyerarsi"] < 60:
         notes.append("Çekim anında ana öznenin görsel ağırlığını biraz daha net kurmak kareyi belirgin biçimde güçlendirebilir.")
     if scores_100["sadelik"] < 60:
         notes.append("Kadrajı sadeleştirip dikkat dağıtan alanları azaltmak fotoğrafın nefesini açar.")
     if scores_100["kompozisyon"] < 60:
         notes.append("Boşluklar ve çizgiler daha bilinçli kullanılırsa göz akışı çok daha güçlü hale gelir.")
-    if metrics.highlight_clip_ratio > 0.03:
-        notes.append("Parlak alanların patlamaması için çekimde ışığı biraz daha kontrollü karşılamak faydalı olabilir.")
-
-    if mode == "Sokak":
-        notes.append("Sokak karelerinde yarım saniyelik bir zamanlama farkı bazen bütün anlatıyı değiştirebilir; anı biraz daha beklemek işe yarayabilir.")
-    elif mode == "Portre":
-        notes.append("Portrede özneyle kurulan küçük bir güven ve rahatlık hissi, teknik her şeyden daha güçlü bir karşılık verebilir.")
-    elif mode == "Belgesel":
-        notes.append("Belgesel karede bağlamı biraz daha görünür bırakmak fotoğrafın tanıklık gücünü artırabilir.")
-    elif mode == "Soyut":
-        notes.append("Soyut çekimlerde biçimsel sadelik ve tekrar ilişkisini biraz daha kararlı kurmak etkiyi büyütür.")
-
+    if scores_100["zamanlama"] < 60:
+        notes.append("Anı biraz daha sabırla beklemek ya da yarım saniye daha erken davranmak sahnenin etkisini yükseltebilir.")
+    if scores_100["derinlik_hissi"] < 60:
+        notes.append("Ön plan, orta plan ve arka plan ilişkisini daha bilinçli kurmak kareye hacim kazandırabilir.")
+    if mode == "Portre":
+        notes.append("Portrede özneyle kurulan küçük bir rahatlık hissi teknik her şeyden daha güçlü çalışabilir.")
+    if mode == "Belgesel":
+        notes.append("Bağlamı biraz daha görünür bırakmak fotoğrafın tanıklık gücünü artırabilir.")
     unique = []
     for n in notes:
         t = tone_text(n, editor_mode)
         if t not in unique:
             unique.append(t)
-    return unique[:4] if unique else ["Bu kare küçük kararlarla daha da güçlenebilir."]
+    return unique[:5] if unique else ["Bu kare küçük kararlarla daha da güçlenebilir."]
 
 
 def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
-    notes: List[str] = []
-
+    notes = []
     if metrics.highlight_clip_ratio > 0.03:
         notes.append("Highlight bölgelerini biraz geri çekmek, fotoğrafın dikkat dengesini daha kontrollü hale getirir.")
     if metrics.shadow_clip_ratio > 0.08:
         notes.append("Siyahları derinleştirirken bilgi kaybını azaltmak kareye daha rafine bir ton dengesi kazandırır.")
     if scores_100["odak_ve_hiyerarsi"] < 60:
         notes.append("Ana özne çevresinde lokal kontrast veya parlaklık desteği vermek gözün tutunmasını kolaylaştırır.")
-    if scores_100["sadelik"] < 60:
-        notes.append("Arka planı bir miktar bastırmak ya da orta tonları sadeleştirmek anlatıyı öne çıkarabilir.")
-
-    if mode == "Sokak":
-        notes.append("Sokak fotoğrafında aşırı temizlik yerine sahnenin canlılığını koruyan hafif düzenlemeler daha doğal sonuç verir.")
-    elif mode == "Portre":
-        notes.append("Portrede yüz tonlarını fazla parlatmadan, ifadeyi öne çıkaran yumuşak geçişler daha güçlü çalışır.")
-    elif mode == "Belgesel":
-        notes.append("Belgesel karede düzenleme hissinin öne çıkmaması, sahnenin inandırıcılığını korumak açısından değerlidir.")
-    elif mode == "Soyut":
-        notes.append("Soyut fotoğrafta tonları sadeleştirmek ve ritmi belirginleştirmek biçimsel etkiyi güçlendirebilir.")
-
+    if scores_100["dikkat_dagitici_unsurlar"] < 60:
+        notes.append("Dikkat dağıtan bölgeleri ton olarak biraz geri itmek anlatıyı öne çıkarabilir.")
+    if scores_100["duygusal_yogunluk"] < 60:
+        notes.append("Ton geçişlerini biraz daha yumuşatmak ya da belirginleştirmek duygusal etkiyi güçlendirebilir.")
     unique = []
     for n in notes:
         t = tone_text(n, editor_mode)
         if t not in unique:
             unique.append(t)
-    return unique[:4] if unique else ["Bu kare için aşırı filtre yerine küçük ve bilinçli ton düzenlemeleri en iyi sonucu verir."]
+    return unique[:5] if unique else ["Bu kare için aşırı filtre yerine küçük ve bilinçli ton düzenlemeleri en iyi sonucu verir."]
 
 
 def build_first_reading(total: float, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
-    level = score_band(total).lower()
-
-    if mode == "Sokak":
-        if scores_100["ilk_etki"] >= 75:
-            text = f"İlk anda bu kare bir sokak karşılaşması duygusu kurabiliyor. Şehrin akışı içinde kendine yer açan, {level} düzeyin üzerinde bir ilk temas hissi var."
-        else:
-            text = "İlk bakışta sahne hissediliyor; ancak sokak fotoğrafının vurucu an etkisi biraz daha güçlenirse kare daha akılda kalıcı olabilir."
-    elif mode == "Portre":
-        if scores_100["anlati_gucu"] >= 75:
-            text = f"İlk anda portrenin duygusal alanı açılıyor. Yüz, bakış ya da beden dili izleyiciyle {level} düzeye yaklaşan bir bağ kurabiliyor."
-        else:
-            text = "İlk anda özne görülüyor; fakat portreyle kurulan duygusal temas biraz daha derinleşirse kare daha etkili hale gelebilir."
-    elif mode == "Belgesel":
-        if scores_100["niyet_tutarliligi"] >= 75:
-            text = "İlk anda kare yalnızca estetik değil; bir bağlam ve tanıklık duygusu da taşıyor. Bu belgesel okuma için çok değerli bir başlangıç."
-        else:
-            text = "İlk bakışta sahnenin bir anlamı olduğu hissediliyor; bağlam biraz daha belirginleşirse belgesel gücü artabilir."
-    elif mode == "Soyut":
-        if scores_100["gorsel_dil"] >= 75:
-            text = "İlk anda görüntü nesne aratmıyor; biçim, ton ve yüzey kendi başına bir etki alanı kurabiliyor."
-        else:
-            text = "İlk anda biçimsel bir ilgi doğuyor; görsel dil biraz daha netleşirse soyut etki çok daha güçlü olabilir."
+    if scores_100["ilk_etki"] >= 75:
+        text = "İlk anda bu kare kendine alan açabiliyor. İzleyiciyi tamamen dışarıda bırakmayan, dikkat toplamayı bilen bir giriş kuruyor."
+    elif scores_100["ilk_etki"] >= 60:
+        text = "İlk anda fotoğrafın bir niyeti hissediliyor. Etki var; fakat daha güçlü bir ilk temasla kare çok daha akılda kalıcı olabilir."
     else:
-        text = "İlk bakışta fotoğraf bir niyet hissi taşıyor."
-
+        text = "Fotoğraf hemen açılan bir etki kurmakta biraz zorlanıyor. Bu kötü olduğu anlamına gelmez; yalnızca ilk temasını belirginleştirmesi gerektiğini gösterir."
     return tone_text(text, editor_mode)
 
 
 def build_structural_reading(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
-    parts = []
-
+    pieces = []
     if scores_100["kompozisyon"] >= 70:
-        parts.append("kadrajın iskeleti genel olarak toparlanmış")
+        pieces.append("kadrajın iskeleti toparlanmış")
     else:
-        parts.append("kadrajın iskeleti daha fazla disiplin istiyor")
-
+        pieces.append("kadrajın iskeleti daha disiplin istiyor")
     if scores_100["odak_ve_hiyerarsi"] >= 70:
-        parts.append("gözün tutunacağı alan büyük ölçüde belli")
+        pieces.append("gözün tutunacağı alan büyük ölçüde belli")
     else:
-        parts.append("odak ve hiyerarşi daha netleşirse okuma rahatlar")
-
-    if scores_100["sadelik"] >= 65:
-        parts.append("görsel yük büyük ölçüde kontrol altında")
+        pieces.append("odak ve hiyerarşi daha netleşirse okuma rahatlar")
+    if scores_100["derinlik_hissi"] >= 65:
+        pieces.append("derinlik duygusu kareyi destekliyor")
     else:
-        parts.append("bazı unsurlar ana anlatının önüne geçebiliyor")
-
-    if metrics.tonal_balance_score >= 0.65:
-        parts.append("ton dengesi fotoğrafa destek veriyor")
-    else:
-        parts.append("ton yapısı daha rafine edilirse kare daha olgun görünür")
-
-    if mode == "Sokak":
-        ending = " Özellikle an, katman ve sahne akışı sokak okumasında belirleyici görünüyor."
-    elif mode == "Portre":
-        ending = " Özellikle yüzün okunurluğu ve özne-arka plan ilişkisi portre etkisini doğrudan belirliyor."
-    elif mode == "Belgesel":
-        ending = " Özellikle bağlamın görünürlüğü ve sahnenin dürüstlüğü belgesel değerini etkiliyor."
-    else:
-        ending = " Özellikle biçimsel ritim ve görsel dilin tutarlılığı soyut okumada daha fazla öne çıkıyor."
-
-    return tone_text("Yapısal olarak bakıldığında " + ", ".join(parts) + "." + ending, editor_mode)
+        pieces.append("derinlik hissi biraz daha güçlenirse fotoğraf hacim kazanır")
+    if scores_100["dikkat_dagitici_unsurlar"] < 60:
+        pieces.append("bazı bölgeler ana anlatının önüne geçiyor")
+    text = "Yapısal olarak bakıldığında " + ", ".join(pieces) + "."
+    return tone_text(text, editor_mode)
 
 
 def build_editorial_result(total: float, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
     if total >= 80:
-        text = f"Genel sonuç olarak bu {mode.lower()} kare yalnızca doğru kararlar içermiyor; aynı zamanda kendi dilini hissettirebiliyor. Editöryel olarak güçlü bir zemini var."
+        text = "Genel sonuç olarak kare yalnızca doğru kararlar içermiyor; aynı zamanda kendi dilini hissettirebiliyor. Editöryel olarak güçlü bir zemini var."
     elif total >= 65:
-        text = f"Genel sonuç olarak bu {mode.lower()} kare güçlü bir potansiyel taşıyor. Doğru yerlere küçük dokunuşlar gelirse etkisi belirgin biçimde artar."
+        text = "Genel sonuç olarak fotoğraf güçlü bir potansiyel taşıyor. Doğru yerlere küçük dokunuşlar gelirse etkisi belirgin biçimde artar."
     elif total >= 45:
-        text = f"Genel sonuç olarak karede iyi bir niyet var. Şimdilik bazı kararlar tam yerine oturmamış olsa da üzerinde düşünülmüş bir yön hissediliyor."
+        text = "Genel sonuç olarak karede iyi bir niyet var. Bazı kararlar tam yerine oturmamış olsa da üzerinde düşünülmüş bir yön hissediliyor."
     else:
-        text = f"Genel sonuç olarak bu {mode.lower()} kare henüz tam açılmamış görünüyor. Yine de burada önemli olan eksik değil; hangi kararların fotoğrafı ileri taşıyacağını görebilmektir."
-
-    ending = " " + EDITOR_MODES[editor_mode]["ending"]
-    return tone_text(text + ending, editor_mode)
+        text = "Genel sonuç olarak bu kare henüz tam açılmamış görünüyor. Burada önemli olan eksik değil; hangi kararların fotoğrafı ileri taşıyacağını görebilmektir."
+    return tone_text(text + " " + EDITOR_MODES[editor_mode]["ending"], editor_mode)
 
 
 def build_editor_summary(total: float, strengths: List[str], dev_areas: List[str], mode: str, editor_mode: str) -> str:
@@ -707,33 +698,27 @@ def build_editor_summary(total: float, strengths: List[str], dev_areas: List[str
 
 def build_tags(scores_100: Dict[str, float], total: float, mode: str) -> List[str]:
     tags = [mode]
-
     if scores_100["anlati_gucu"] >= 75:
         tags.append("Güçlü duygu")
     if scores_100["kompozisyon"] >= 75:
         tags.append("Sağlam kompozisyon")
-    if scores_100["teknik_butunluk"] >= 75:
-        tags.append("Teknik bütünlük")
-    if scores_100["sadelik"] < 55:
-        tags.append("Görsel gürültü")
-    if scores_100["odak_ve_hiyerarsi"] < 55:
-        tags.append("Odak zayıf")
-    if scores_100["niyet_tutarliligi"] >= 70:
-        tags.append("Niyeti hissediliyor")
-    if scores_100["gorsel_dil"] >= 75 and mode == "Soyut":
-        tags.append("Biçimsel güç")
+    if scores_100["isik_yonu"] >= 75:
+        tags.append("Işık iyi kullanılmış")
+    if scores_100["editoryal_deger"] >= 75:
+        tags.append("Editoryal değer")
+    if scores_100["tekrar_bakma_istegi"] >= 75:
+        tags.append("Tekrar bakma isteği")
     if total >= 80:
-        tags.append("Editoryal olarak güçlü")
+        tags.append("Çok güçlü")
     elif total >= 65:
         tags.append("Yüksek potansiyel")
     else:
         tags.append("Geliştirilebilir")
-
     unique = []
     for tag in tags:
         if tag not in unique:
             unique.append(tag)
-    return unique[:5]
+    return unique[:6]
 
 
 def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueResult:
@@ -774,28 +759,15 @@ st.markdown(
             linear-gradient(180deg, #050505 0%, #0d0d0d 100%);
         color: #f5f5f5;
     }
-
     .block-container {
         padding-top: 2rem;
         padding-bottom: 3rem;
         max-width: 1180px;
-        animation: fadeInUp .65s ease;
     }
-
-    @keyframes fadeInUp {
-        0% { opacity: 0; transform: translateY(14px); }
-        100% { opacity: 1; transform: translateY(0); }
-    }
-
     section[data-testid="stSidebar"] {
         background: #0a0a0a;
         border-right: 1px solid rgba(212,175,55,.16);
     }
-
-    section[data-testid="stSidebar"] .block-container {
-        padding-top: 1.2rem;
-    }
-
     .hero {
         padding: 1.8rem;
         border: 1px solid rgba(212,175,55,.18);
@@ -804,22 +776,18 @@ st.markdown(
         box-shadow: 0 14px 40px rgba(0,0,0,.35);
         margin-bottom: 1rem;
     }
-
     .hero h1 {
         margin: 0;
         font-size: 2.8rem;
         line-height: 1.05;
         color: #fff7dc;
-        letter-spacing: 0.2px;
     }
-
     .hero p {
         margin-top: .8rem;
         font-size: 1.06rem;
         color: rgba(255,255,255,.97);
         line-height: 1.65;
     }
-
     .hero-badge {
         display: inline-block;
         margin-top: .9rem;
@@ -831,7 +799,6 @@ st.markdown(
         font-size: .92rem;
         font-weight: 600;
     }
-
     .soft-card, .score-box, .editor-card {
         border: 1px solid rgba(212,175,55,.14);
         border-radius: 18px;
@@ -840,21 +807,18 @@ st.markdown(
         box-shadow: 0 8px 24px rgba(0,0,0,.18);
         margin-bottom: 1rem;
     }
-
     .section-title, .editor-title {
         font-size: 1.05rem;
         font-weight: 700;
         color: #f1d67a;
         margin-bottom: .45rem;
     }
-
     .mini-note {
         font-size: .97rem;
         line-height: 1.7;
         color: rgba(255,255,255,.98) !important;
         opacity: 1 !important;
     }
-
     .quote-box {
         border-left: 4px solid rgba(212,175,55,.92);
         padding: .95rem 1rem;
@@ -863,14 +827,12 @@ st.markdown(
         margin: .5rem 0 1rem 0;
         color: #fff3cf;
     }
-
     .upload-label {
         font-size: 1rem;
         font-weight: 700;
         color: #ffffff;
         margin-bottom: .35rem;
     }
-
     .tag-pill {
         display: inline-block;
         padding: .35rem .65rem;
@@ -881,20 +843,17 @@ st.markdown(
         font-size: .88rem;
         margin: 0 .35rem .45rem 0;
     }
-
     div[data-testid="stFileUploader"] {
         background: rgba(255,255,255,.03);
         border: 1px solid rgba(212,175,55,.12);
         border-radius: 18px;
         padding: .35rem .7rem .6rem .7rem;
     }
-
     div[data-testid="stFileUploader"] section {
         border: 1px dashed rgba(212,175,55,.22) !important;
         border-radius: 14px !important;
         background: rgba(255,255,255,.02);
     }
-
     div[data-testid="stFileUploader"] small,
     div[data-testid="stFileUploader"] span,
     div[data-testid="stFileUploader"] label,
@@ -902,21 +861,16 @@ st.markdown(
         color: #ffffff !important;
         opacity: 1 !important;
     }
-
-    /* Upload yazılarını gizle */
     div[data-testid="stFileUploader"] button * {
         opacity: 0 !important;
         color: transparent !important;
     }
-
     div[data-testid="stFileUploader"] button {
         position: relative !important;
         color: transparent !important;
         font-size: 0 !important;
         min-width: 110px !important;
-        font-weight: 700 !important;
     }
-
     div[data-testid="stFileUploader"] button::after {
         content: "YÜKLE";
         position: absolute;
@@ -929,7 +883,6 @@ st.markdown(
         font-size: 14px !important;
         letter-spacing: 0.5px;
     }
-
     div[data-testid="stMetric"] {
         background: rgba(255,255,255,.03);
         border: 1px solid rgba(212,175,55,.10);
@@ -937,40 +890,32 @@ st.markdown(
         border-radius: 16px;
         box-shadow: 0 6px 18px rgba(0,0,0,.16);
     }
-
     div[data-testid="stMetricValue"] {
         color: #ffffff !important;
         font-weight: 800 !important;
         font-size: 1.55rem !important;
         opacity: 1 !important;
     }
-
     div[data-testid="stMetricLabel"] {
         color: #ffffff !important;
         font-weight: 700 !important;
         opacity: 1 !important;
     }
-
     div[data-testid="stMetricDelta"] {
         color: #ffffff !important;
         opacity: .92 !important;
     }
-
     h2, h3, h4 {
         color: #fff2c2;
-        letter-spacing: 0.2px;
     }
-
     p, li, label {
         color: rgba(255,255,255,.96) !important;
     }
-
     hr {
         border: none;
         border-top: 1px solid rgba(212,175,55,.12);
         margin: 1.6rem 0;
     }
-
     .stButton > button {
         background: linear-gradient(135deg, rgba(212,175,55,.18), rgba(212,175,55,.08));
         color: #fff8dc;
@@ -992,24 +937,13 @@ with st.sidebar:
         st.image(logo_file, use_container_width=True)
 
     st.markdown("## ÇOFSAT")
-
     st.markdown("### Değerlendirme modu")
-    selected_mode = st.radio(
-        label="",
-        options=list(MODE_PROFILES.keys()),
-        index=0,
-        label_visibility="collapsed",
-    )
+    selected_mode = st.radio("", options=list(MODE_PROFILES.keys()), index=0, label_visibility="collapsed")
     st.markdown(f"**{selected_mode}**")
     st.markdown(MODE_PROFILES[selected_mode]["description"])
 
     st.markdown("### Editör tonu")
-    selected_editor_mode = st.radio(
-        label="",
-        options=list(EDITOR_MODES.keys()),
-        index=0,
-        label_visibility="collapsed",
-    )
+    selected_editor_mode = st.radio("", options=list(EDITOR_MODES.keys()), index=0, label_visibility="collapsed")
 
     st.markdown("### Temel soru")
     st.warning(CULTURE["temel_soru"])
@@ -1018,14 +952,8 @@ with st.sidebar:
     for q in CULTURE["okuma_sorulari"][:3]:
         st.markdown(f"- {q}")
 
-    st.markdown(
-        f"<div class='mini-note'>{MODE_PROFILES[selected_mode]['focus_hint']}</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        f"<div class='mini-note'>{EDITOR_MODES[selected_editor_mode]['ending']}</div>",
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"<div class='mini-note'>{MODE_PROFILES[selected_mode]['focus_hint']}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='mini-note'>{EDITOR_MODES[selected_editor_mode]['ending']}</div>", unsafe_allow_html=True)
 
 header_left, header_right = st.columns([0.18, 0.82])
 
@@ -1076,10 +1004,7 @@ if uploaded_file is not None:
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("### Kısa etiketler")
-    st.markdown(
-        "".join([f"<span class='tag-pill'>{tag}</span>" for tag in result.tags]),
-        unsafe_allow_html=True,
-    )
+    st.markdown("".join([f"<span class='tag-pill'>{tag}</span>" for tag in result.tags]), unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"## {selected_mode} Okuması")
@@ -1115,7 +1040,6 @@ if uploaded_file is not None:
     )
 
     c1, c2 = st.columns(2)
-
     with c1:
         st.markdown("### Güçlü taraflar")
         for item in result.strengths:
@@ -1135,12 +1059,19 @@ if uploaded_file is not None:
         row1[i].metric(RUBRIC_LABELS[key], f"{val}")
 
     row2 = st.columns(4)
-    for i, (key, val) in enumerate(score_items[4:]):
+    for i, (key, val) in enumerate(score_items[4:8]):
         row2[i].metric(RUBRIC_LABELS[key], f"{val}")
+
+    row3 = st.columns(4)
+    for i, (key, val) in enumerate(score_items[8:12]):
+        row3[i].metric(RUBRIC_LABELS[key], f"{val}")
+
+    row4 = st.columns(4)
+    for i, (key, val) in enumerate(score_items[12:16]):
+        row4[i].metric(RUBRIC_LABELS[key], f"{val}")
 
     st.markdown("---")
     q1, q2 = st.columns(2)
-
     with q1:
         st.markdown("## Bir sonraki çekim için notlar")
         for item in result.shooting_notes:
