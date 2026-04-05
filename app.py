@@ -2,7 +2,7 @@ import io
 import math
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 import numpy as np
 from PIL import Image, ImageStat
@@ -106,7 +106,7 @@ class CritiqueResult:
     metrics: Dict
 
 
-def find_logo_file() -> str | None:
+def find_logo_file() -> Optional[str]:
     candidates = ["logo.png", "logo.jpg", "logo.jpeg", "2.jpeg", "2.jpg"]
     for name in candidates:
         if Path(name).exists():
@@ -445,7 +445,7 @@ st.markdown(
             radial-gradient(circle at top left, rgba(212,175,55,0.08), transparent 28%),
             radial-gradient(circle at bottom right, rgba(212,175,55,0.05), transparent 24%),
             linear-gradient(180deg, #050505 0%, #0d0d0d 100%);
-        color: #f3f1ea;
+        color: #f5f5f5;
     }
 
     .block-container {
@@ -457,6 +457,10 @@ st.markdown(
     section[data-testid="stSidebar"] {
         background: #0a0a0a;
         border-right: 1px solid rgba(212,175,55,.16);
+    }
+
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 1.2rem;
     }
 
     .hero {
@@ -472,37 +476,50 @@ st.markdown(
         margin: 0;
         font-size: 2.8rem;
         line-height: 1.05;
-        color: #f5ebc8;
+        color: #fff7dc;
         letter-spacing: 0.2px;
     }
 
     .hero p {
         margin-top: .8rem;
-        font-size: 1.05rem;
-        color: rgba(255,255,255,.84);
-        line-height: 1.6;
+        font-size: 1.06rem;
+        color: rgba(255,255,255,.96);
+        line-height: 1.65;
+    }
+
+    .hero-badge {
+        display: inline-block;
+        margin-top: .9rem;
+        padding: .45rem .85rem;
+        border-radius: 999px;
+        border: 1px solid rgba(212,175,55,.20);
+        background: rgba(212,175,55,.08);
+        color: #f0d782;
+        font-size: .92rem;
+        font-weight: 600;
     }
 
     .soft-card {
         border: 1px solid rgba(212,175,55,.12);
         border-radius: 18px;
-        padding: 1rem 1rem .85rem 1rem;
+        padding: 1rem 1rem .9rem 1rem;
         background: rgba(255,255,255,.03);
         margin-bottom: .9rem;
         box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
 
     .section-title {
-        font-size: 1.16rem;
+        font-size: 1.15rem;
         font-weight: 700;
         margin-bottom: .45rem;
         color: #f1d67a;
     }
 
     .mini-note {
-        font-size: .96rem;
-        opacity: .84;
-        line-height: 1.65;
+        font-size: .97rem;
+        line-height: 1.7;
+        color: rgba(255,255,255,.96);
+        opacity: 1;
     }
 
     .score-box {
@@ -519,24 +536,95 @@ st.markdown(
         background: rgba(212,175,55,.08);
         border-radius: 0 14px 14px 0;
         margin: .5rem 0 1rem 0;
-        color: #f8efcf;
-    }
-
-    .hero-badge {
-        display: inline-block;
-        margin-top: .85rem;
-        padding: .4rem .8rem;
-        border-radius: 999px;
-        border: 1px solid rgba(212,175,55,.20);
-        background: rgba(212,175,55,.08);
-        color: #f0d782;
-        font-size: .92rem;
+        color: #fff3cf;
     }
 
     .upload-label {
         font-size: 1rem;
-        font-weight: 600;
+        font-weight: 700;
         color: #f1d67a;
+        margin-bottom: .35rem;
+    }
+
+    div[data-testid="stFileUploader"] {
+        background: rgba(255,255,255,.03);
+        border: 1px solid rgba(212,175,55,.12);
+        border-radius: 18px;
+        padding: .35rem .7rem .6rem .7rem;
+    }
+
+    div[data-testid="stFileUploader"] section {
+        border: 1px dashed rgba(212,175,55,.22) !important;
+        border-radius: 14px !important;
+        background: rgba(255,255,255,.02);
+    }
+
+    div[data-testid="stMetric"] {
+        background: rgba(255,255,255,.03);
+        border: 1px solid rgba(212,175,55,.10);
+        padding: .85rem;
+        border-radius: 16px;
+        box-shadow: 0 6px 18px rgba(0,0,0,.16);
+    }
+
+    div[data-testid="stMetricValue"] {
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        font-size: 1.55rem !important;
+    }
+
+    div[data-testid="stMetricLabel"] {
+        color: rgba(255,255,255,.94) !important;
+        font-weight: 600 !important;
+    }
+
+    div[data-testid="stMetricDelta"] {
+        color: rgba(255,255,255,.82) !important;
+    }
+
+    div[data-testid="stProgressBar"] > div {
+        border-radius: 999px;
+        overflow: hidden;
+    }
+
+    details {
+        background: rgba(255,255,255,.03);
+        border: 1px solid rgba(212,175,55,.10);
+        border-radius: 14px;
+        padding: .4rem .7rem;
+    }
+
+    h2, h3, h4 {
+        color: #fff2c2;
+        letter-spacing: 0.2px;
+    }
+
+    p, li, label, div {
+        color: inherit;
+    }
+
+    hr {
+        border: none;
+        border-top: 1px solid rgba(212,175,55,.12);
+        margin: 1.6rem 0;
+    }
+
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] li {
+        color: rgba(255,255,255,.95);
+    }
+
+    div[data-testid="stInfo"] {
+        background: rgba(255,255,255,.04) !important;
+        border: 1px solid rgba(212,175,55,.12) !important;
+        color: #ffffff !important;
+        border-radius: 14px !important;
+    }
+
+    div[data-testid="stAlert"] {
+        border-radius: 14px !important;
     }
     </style>
     """,
@@ -571,8 +659,8 @@ with header_right:
         <div class="hero">
             <h1>ÇOFSAT Fotoğraf Ön Değerlendirme</h1>
             <p>
-                Fotoğrafı sadece beğenmek için değil, durup okumak için tasarlanmış
-                ÇOFSAT temelli otomatik değerlendirme sistemi.
+                Fotoğrafı yalnızca göstermek için değil, okumak için ele alan
+                ÇOFSAT temelli ön değerlendirme sistemi.
             </p>
             <div class="hero-badge">Kadraj · Niyet · Anlatı · Sadelik · Görsel Dil</div>
         </div>
@@ -650,7 +738,7 @@ if uploaded_file is not None:
             st.markdown(f"- {item}")
 
     st.markdown("---")
-    st.markdown("## Değerlendirme Oranları")
+    st.markdown("## Değerlendirme Kategorileri")
 
     score_items = list(result.rubric_scores.items())
     row1 = st.columns(4)
@@ -689,122 +777,4 @@ else:
         </div>
         """,
         unsafe_allow_html=True,
-    )import io
-import math
-from dataclasses import dataclass, asdict
-from pathlib import Path
-from typing import Dict, List, Tuple
-
-import numpy as np
-from PIL import Image, ImageStat
-import streamlit as st
-
-# ================= CONFIG =================
-st.set_page_config(
-    page_title="ÇOFSAT Fotoğraf Ön Değerlendirme",
-    layout="wide",
-    page_icon="📷",
-)
-
-# ================= CSS (UI POLISH) =================
-st.markdown("""
-<style>
-.stApp {
-    background: linear-gradient(180deg, #050505 0%, #0d0d0d 100%);
-    color: #f5f5f5;
-}
-
-.hero {
-    padding: 1.8rem;
-    border: 1px solid rgba(212,175,55,.18);
-    border-radius: 24px;
-    background: linear-gradient(135deg, rgba(255,255,255,.04), rgba(212,175,55,.08));
-    box-shadow: 0 14px 40px rgba(0,0,0,.35);
-    margin-bottom: 1rem;
-}
-
-.hero h1 {
-    color: #fff7dc;
-}
-
-.mini-note {
-    color: rgba(255,255,255,.96);
-}
-
-div[data-testid="stMetricValue"] {
-    color: #ffffff !important;
-    font-weight: 800 !important;
-    font-size: 1.5rem !important;
-}
-
-div[data-testid="stMetricLabel"] {
-    color: rgba(255,255,255,.95) !important;
-}
-
-</style>
-""", unsafe_allow_html=True)
-
-# ================= LOGO =================
-def find_logo():
-    for f in ["logo.png", "logo.jpg", "logo.jpeg"]:
-        if Path(f).exists():
-            return f
-    return None
-
-logo = find_logo()
-
-# ================= HEADER =================
-col1, col2 = st.columns([0.2, 0.8])
-
-with col1:
-    if logo:
-        st.image(logo, width=120)
-
-with col2:
-    st.markdown("""
-    <div class="hero">
-        <h1>ÇOFSAT Fotoğraf Ön Değerlendirme</h1>
-        <p>Fotoğrafı sadece beğenmek için değil, okumak için.</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ================= UPLOAD =================
-st.markdown("### Fotoğraf yükleyin")
-
-uploaded_file = st.file_uploader("", type=["jpg","png","jpeg"])
-
-# ================= ANALİZ =================
-if uploaded_file:
-    img = Image.open(io.BytesIO(uploaded_file.getvalue())).convert("RGB")
-    gray = np.array(img.convert("L"))
-
-    mean = np.mean(gray)
-    std = np.std(gray)
-
-    score = int((std / 80) * 100)
-    score = max(0, min(score, 100))
-
-    colA, colB = st.columns([1,1])
-
-    with colA:
-        st.image(img, use_container_width=True)
-
-    with colB:
-        st.metric("ÇOFSAT Skoru", f"{score}/100")
-
-    st.markdown("---")
-
-    st.markdown("## Değerlendirme Kategorileri")
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Teknik", score)
-    c2.metric("Kadraj", score-5)
-    c3.metric("Anlatı", score-10)
-    c4.metric("Niyet", score-3)
-
-else:
-    st.markdown("""
-    <div class="mini-note">
-    Başlamak için bir fotoğraf yükleyin.
-    </div>
-    """, unsafe_allow_html=True)
+    )
