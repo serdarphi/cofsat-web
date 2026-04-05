@@ -650,7 +650,7 @@ if uploaded_file is not None:
             st.markdown(f"- {item}")
 
     st.markdown("---")
-    st.markdown("## Rubrik")
+    st.markdown("## Değerlendirme Oranları")
 
     score_items = list(result.rubric_scores.items())
     row1 = st.columns(4)
