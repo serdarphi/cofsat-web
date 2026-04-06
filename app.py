@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
-from PIL import Image, ImageStat
+from PIL import Image, ImageStat, ImageDraw
 
 try:
     import cv2
@@ -19,6 +19,10 @@ st.set_page_config(
     layout="wide",
     page_icon="📷",
 )
+
+# ============================================================
+# Kültür / Sabitler
+# ============================================================
 
 CULTURE = {
     "ad": "ÇOFSAT",
@@ -108,6 +112,10 @@ EDITOR_MODES = {
 }
 
 
+# ============================================================
+# Veri Yapıları
+# ============================================================
+
 @dataclass
 class ImageMetrics:
     width: int
@@ -150,8 +158,15 @@ class CritiqueResult:
     editing_notes: List[str]
     reading_prompts: List[str]
     tags: List[str]
+    key_strength: str
+    key_issue: str
+    one_move_improvement: str
     metrics: Dict
 
+
+# ============================================================
+# Yardımcılar
+# ============================================================
 
 def find_logo_file() -> Optional[str]:
     candidates = ["logo.png", "logo.jpg", "logo.jpeg", "2.jpeg", "2.jpg"]
@@ -171,6 +186,15 @@ def pil_to_gray_np(img: Image.Image) -> np.ndarray:
 
 def clamp01(x: float) -> float:
     return max(0.0, min(1.0, x))
+
+
+def normalize_array(arr: np.ndarray) -> np.ndarray:
+    arr = arr.astype(np.float32)
+    mn = arr.min()
+    mx = arr.max()
+    if mx - mn < 1e-9:
+        return np.zeros_like(arr, dtype=np.float32)
+    return (arr - mn) / (mx - mn)
 
 
 def estimate_focus_score(gray: np.ndarray) -> float:
@@ -302,6 +326,10 @@ def extract_metrics(img: Image.Image) -> ImageMetrics:
 def normalize_focus(metrics: ImageMetrics) -> float:
     return clamp01(1 - abs((math.log1p(metrics.focus_score) - 4.2) / 3.0))
 
+
+# ============================================================
+# Puanlama
+# ============================================================
 
 def score_first_impact(metrics: ImageMetrics) -> float:
     focus = normalize_focus(metrics)
@@ -506,6 +534,10 @@ def tone_text(text: str, editor_mode: str) -> str:
     return text
 
 
+# ============================================================
+# Yorumlama
+# ============================================================
+
 def overall_tag_from_scores(scores_100: Dict[str, float], mode: str) -> str:
     if mode == "Sokak":
         if scores_100["anlati_gucu"] >= 75:
@@ -534,7 +566,7 @@ def overall_tag_from_scores(scores_100: Dict[str, float], mode: str) -> str:
     return "Potansiyeli olan kare"
 
 
-def pick_strengths(scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
+def pick_strengths(scores_100: Dict[str, float], editor_mode: str) -> List[str]:
     ordered = sorted(scores_100.items(), key=lambda x: x[1], reverse=True)
     mapping = {
         "ilk_etki": "Fotoğraf ilk bakışta kendine alan açabiliyor; izleyiciyi tamamen dışarıda bırakmıyor.",
@@ -557,7 +589,7 @@ def pick_strengths(scores_100: Dict[str, float], mode: str, editor_mode: str) ->
     return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:4]]
 
 
-def pick_development_areas(scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
+def pick_development_areas(scores_100: Dict[str, float], editor_mode: str) -> List[str]:
     ordered = sorted(scores_100.items(), key=lambda x: x[1])
     mapping = {
         "ilk_etki": "İlk bakışta izleyiciyi durduracak kadar güçlü bir giriş henüz tam kurulamıyor.",
@@ -578,6 +610,75 @@ def pick_development_areas(scores_100: Dict[str, float], mode: str, editor_mode:
         "tekrar_bakma_istegi": "Fotoğraf ilk bakışta kendini gösteriyor ama ikinci bakış için daha fazla katman isteyebilir.",
     }
     return [tone_text(mapping[k], editor_mode) for k, _ in ordered[:4]]
+
+
+def build_key_strength(scores_100: Dict[str, float], editor_mode: str) -> str:
+    key = max(scores_100.items(), key=lambda x: x[1])[0]
+    mapping = {
+        "ilk_etki": "Bu karenin en güçlü tarafı ilk temas gücü; izleyiciyi dışarıda bırakmıyor.",
+        "teknik_butunluk": "Bu karenin en güçlü tarafı teknik bütünlüğü; ton ve netlik yapıyı taşıyor.",
+        "kompozisyon": "Bu karenin en güçlü tarafı kompozisyonu; iskelet dağılmıyor.",
+        "odak_ve_hiyerarsi": "Bu karenin en güçlü tarafı odak yapısı; gözün tutunacağı yer belli.",
+        "anlati_gucu": "Bu karenin en güçlü tarafı anlatı hissi; yalnızca göstermiyor, bir şey hissettiriyor.",
+        "gorsel_dil": "Bu karenin en güçlü tarafı görsel dili; biçimsel kararlar ortak bir yapı kuruyor.",
+        "sadelik": "Bu karenin en güçlü tarafı sadeliği; gereksiz yük geri çekilmiş.",
+        "niyet_tutarliligi": "Bu karenin en güçlü tarafı niyet hissi; neden var olduğu seziliyor.",
+        "isik_yonu": "Bu karenin en güçlü tarafı ışık kullanımı; ışık sahneye anlam katıyor.",
+        "derinlik_hissi": "Bu karenin en güçlü tarafı derinlik duygusu; kare hacim kazanıyor.",
+        "dikkat_dagitici_unsurlar": "Bu karenin en güçlü tarafı dikkat kontrolü; göz kolay dağılmıyor.",
+        "zamanlama": "Bu karenin en güçlü tarafı zamanlaması; an etkisi taşıyor.",
+        "negatif_alan": "Bu karenin en güçlü tarafı boşluk kullanımı; alan anlatıya hizmet ediyor.",
+        "duygusal_yogunluk": "Bu karenin en güçlü tarafı duygusal yoğunluğu; izleyiciyle temas kuruyor.",
+        "editoryal_deger": "Bu karenin en güçlü tarafı editoryal ağırlığı; seçki içinde yer açabilecek bir yapı taşıyor.",
+        "tekrar_bakma_istegi": "Bu karenin en güçlü tarafı tekrar bakma isteği yaratması; ilk bakıştan sonra da çalışıyor.",
+    }
+    return tone_text(mapping[key], editor_mode)
+
+
+def build_key_issue(scores_100: Dict[str, float], editor_mode: str) -> str:
+    key = min(scores_100.items(), key=lambda x: x[1])[0]
+    mapping = {
+        "ilk_etki": "Bu karede en belirgin sorun ilk temasın zayıf kalması; izleyiciyi durdurma gücü tam açılmıyor.",
+        "teknik_butunluk": "Bu karede en belirgin sorun teknik bütünlüğün yer yer dağılması; ton veya netlik anlatıyı zorlayabiliyor.",
+        "kompozisyon": "Bu karede en belirgin sorun kompozisyonun yeterince sıkı kurulmaması.",
+        "odak_ve_hiyerarsi": "Bu karede en belirgin sorun odak ve hiyerarşinin netleşmemesi.",
+        "anlati_gucu": "Bu karede en belirgin sorun anlatının tam açılmaması; his var ama yeterince taşınmıyor.",
+        "gorsel_dil": "Bu karede en belirgin sorun görsel dilin henüz tam bütünleşmemesi.",
+        "sadelik": "Bu karede en belirgin sorun gereksiz görsel yükün kadraj içinde kalması.",
+        "niyet_tutarliligi": "Bu karede en belirgin sorun niyetin yeterince görünür hale gelmemesi.",
+        "isik_yonu": "Bu karede en belirgin sorun ışığın ana anlatıyı yeterince taşımaması.",
+        "derinlik_hissi": "Bu karede en belirgin sorun derinlik duygusunun zayıf kalması.",
+        "dikkat_dagitici_unsurlar": "Bu karede en belirgin sorun dikkat dağıtan bölgelerin fazla baskın olması.",
+        "zamanlama": "Bu karede en belirgin sorun zamanlamanın bir kademe daha iyi olabilecek hissi vermesi.",
+        "negatif_alan": "Bu karede en belirgin sorun boşluk kullanımının tam kararında oturmaması.",
+        "duygusal_yogunluk": "Bu karede en belirgin sorun duygusal etkinin yeterince yoğunlaşmaması.",
+        "editoryal_deger": "Bu karede en belirgin sorun editoryal ağırlığın henüz tam oluşmaması.",
+        "tekrar_bakma_istegi": "Bu karede en belirgin sorun ikinci bakış için yeterli katman üretmemesi.",
+    }
+    return tone_text(mapping[key], editor_mode)
+
+
+def build_one_move_improvement(scores_100: Dict[str, float], editor_mode: str) -> str:
+    key = min(scores_100.items(), key=lambda x: x[1])[0]
+    mapping = {
+        "ilk_etki": "Tek hamlede en büyük iyileşme, giriş etkisini güçlendirecek daha net bir vurgu kurmak olur.",
+        "teknik_butunluk": "Tek hamlede en büyük iyileşme, ton ve netliği biraz daha rafine temizlemek olur.",
+        "kompozisyon": "Tek hamlede en büyük iyileşme, kadraj iskeletini daha kararlı kurmak olur.",
+        "odak_ve_hiyerarsi": "Tek hamlede en büyük iyileşme, ana öznenin görsel ağırlığını netleştirmek olur.",
+        "anlati_gucu": "Tek hamlede en büyük iyileşme, fotoğrafın asıl hissetmek istediği şeyi daha görünür kılmak olur.",
+        "gorsel_dil": "Tek hamlede en büyük iyileşme, biçimsel kararları daha tek bir dil altında toplamak olur.",
+        "sadelik": "Tek hamlede en büyük iyileşme, dikkat dağıtan unsurları kadrajdan çıkarmak ya da geri itmek olur.",
+        "niyet_tutarliligi": "Tek hamlede en büyük iyileşme, fotoğrafın neden var olduğunu daha açık hissettirmek olur.",
+        "isik_yonu": "Tek hamlede en büyük iyileşme, ışığın ana özneyi taşıma biçimini güçlendirmek olur.",
+        "derinlik_hissi": "Tek hamlede en büyük iyileşme, ön-orta-arka plan ilişkisini belirginleştirmek olur.",
+        "dikkat_dagitici_unsurlar": "Tek hamlede en büyük iyileşme, fazla dikkat çeken yan alanları bastırmak olur.",
+        "zamanlama": "Tek hamlede en büyük iyileşme, daha doğru anı seçmek olur.",
+        "negatif_alan": "Tek hamlede en büyük iyileşme, boşluğu daha bilinçli bir anlatı aracına çevirmek olur.",
+        "duygusal_yogunluk": "Tek hamlede en büyük iyileşme, duygusal odağı daha görünür hale getirmek olur.",
+        "editoryal_deger": "Tek hamlede en büyük iyileşme, karenin editoryal ağırlığını artıracak daha net bir seçim yapmak olur.",
+        "tekrar_bakma_istegi": "Tek hamlede en büyük iyileşme, ilk bakıştan sonra da çalışacak ikinci katmanı güçlendirmek olur.",
+    }
+    return tone_text(mapping[key], editor_mode)
 
 
 def build_reading_prompts(scores_100: Dict[str, float], mode: str) -> List[str]:
@@ -601,7 +702,7 @@ def build_reading_prompts(scores_100: Dict[str, float], mode: str) -> List[str]:
 def build_shooting_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
     notes = []
     if scores_100["odak_ve_hiyerarsi"] < 60:
-        notes.append("Çekim anında ana öznenin görsel ağırlığını biraz daha net kurmak kareyi belirgin biçimde güçlendirebilir.")
+        notes.append("Çekim anında ana öznenin görsel ağırlığını daha net kurmak kareyi belirgin biçimde güçlendirebilir.")
     if scores_100["sadelik"] < 60:
         notes.append("Kadrajı sadeleştirip dikkat dağıtan alanları azaltmak fotoğrafın nefesini açar.")
     if scores_100["kompozisyon"] < 60:
@@ -614,6 +715,7 @@ def build_shooting_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mo
         notes.append("Portrede özneyle kurulan küçük bir rahatlık hissi teknik her şeyden daha güçlü çalışabilir.")
     if mode == "Belgesel":
         notes.append("Bağlamı biraz daha görünür bırakmak fotoğrafın tanıklık gücünü artırabilir.")
+
     unique = []
     for n in notes:
         t = tone_text(n, editor_mode)
@@ -634,6 +736,7 @@ def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mod
         notes.append("Dikkat dağıtan bölgeleri ton olarak biraz geri itmek anlatıyı öne çıkarabilir.")
     if scores_100["duygusal_yogunluk"] < 60:
         notes.append("Ton geçişlerini biraz daha yumuşatmak ya da belirginleştirmek duygusal etkiyi güçlendirebilir.")
+
     unique = []
     for n in notes:
         t = tone_text(n, editor_mode)
@@ -727,8 +830,8 @@ def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueRes
     total = weighted_total(scores)
     scores_100 = {k: round(v * 100, 1) for k, v in scores.items()}
 
-    strengths = pick_strengths(scores_100, mode, editor_mode)
-    dev_areas = pick_development_areas(scores_100, mode, editor_mode)
+    strengths = pick_strengths(scores_100, editor_mode)
+    dev_areas = pick_development_areas(scores_100, editor_mode)
 
     return CritiqueResult(
         total_score=total,
@@ -745,9 +848,115 @@ def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueRes
         editing_notes=build_editing_notes(metrics, scores_100, mode, editor_mode),
         reading_prompts=build_reading_prompts(scores_100, mode),
         tags=build_tags(scores_100, total, mode),
+        key_strength=build_key_strength(scores_100, editor_mode),
+        key_issue=build_key_issue(scores_100, editor_mode),
+        one_move_improvement=build_one_move_improvement(scores_100, editor_mode),
         metrics=asdict(metrics),
     )
 
+
+# ============================================================
+# Heatmap / Overlay
+# ============================================================
+
+def build_attention_map(img: Image.Image) -> np.ndarray:
+    gray = np.array(img.convert("L")).astype(np.float32)
+
+    gx = np.zeros_like(gray)
+    gy = np.zeros_like(gray)
+    gy[1:, :] = np.abs(gray[1:, :] - gray[:-1, :])
+    gx[:, 1:] = np.abs(gray[:, 1:] - gray[:, :-1])
+
+    grad = np.sqrt(gx ** 2 + gy ** 2)
+    inv = 255.0 - gray
+    grad_n = normalize_array(grad)
+    inv_n = normalize_array(inv)
+
+    if cv2 is not None:
+        blur = cv2.GaussianBlur((0.70 * grad_n + 0.30 * inv_n).astype(np.float32), (0, 0), 9)
+    else:
+        blur = 0.70 * grad_n + 0.30 * inv_n
+
+    return normalize_array(blur)
+
+
+def top_regions(attention: np.ndarray, n: int = 3, window: int = 50) -> List[Tuple[int, int]]:
+    h, w = attention.shape
+    work = attention.copy()
+    pts: List[Tuple[int, int]] = []
+
+    for _ in range(n):
+        idx = np.argmax(work)
+        y, x = np.unravel_index(idx, work.shape)
+        pts.append((int(x), int(y)))
+
+        x1 = max(0, x - window)
+        x2 = min(w, x + window)
+        y1 = max(0, y - window)
+        y2 = min(h, y + window)
+        work[y1:y2, x1:x2] = 0
+
+    return pts
+
+
+def distraction_regions(attention: np.ndarray, main_points: List[Tuple[int, int]], n: int = 2) -> List[Tuple[int, int]]:
+    h, w = attention.shape
+    work = attention.copy()
+
+    for x, y in main_points:
+        x1 = max(0, x - 60)
+        x2 = min(w, x + 60)
+        y1 = max(0, y - 60)
+        y2 = min(h, y + 60)
+        work[y1:y2, x1:x2] = 0
+
+    return top_regions(work, n=n, window=45)
+
+
+def draw_analysis_overlay(
+    img: Image.Image,
+    main_points: List[Tuple[int, int]],
+    distraction_points: List[Tuple[int, int]],
+) -> Image.Image:
+    out = img.copy().convert("RGBA")
+    overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    # göz akışı çizgisi
+    if len(main_points) >= 2:
+        draw.line(main_points, fill=(255, 220, 120, 200), width=5)
+
+    # odak noktaları
+    for i, (x, y) in enumerate(main_points):
+        r = 18 if i == 0 else 14
+        draw.ellipse((x - r, y - r, x + r, y + r), outline=(255, 220, 120, 255), width=4)
+        draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill=(255, 220, 120, 255))
+
+    # dikkat dağıtan alanlar
+    for x, y in distraction_points:
+        r = 20
+        draw.rectangle((x - r, y - r, x + r, y + r), outline=(255, 90, 90, 220), width=4)
+
+    out = Image.alpha_composite(out, overlay)
+    return out.convert("RGB")
+
+
+def build_heatmap_image(img: Image.Image, attention: np.ndarray) -> Image.Image:
+    base = img.copy().convert("RGBA")
+    a = (normalize_array(attention) * 170).astype(np.uint8)
+    heat = np.zeros((attention.shape[0], attention.shape[1], 4), dtype=np.uint8)
+    heat[..., 0] = 255
+    heat[..., 1] = 190
+    heat[..., 2] = 60
+    heat[..., 3] = a
+    heat_img = Image.fromarray(heat, mode="RGBA")
+    mixed = Image.alpha_composite(base, heat_img)
+    return mixed.convert("RGB")
+
+
+# ============================================================
+# UI
+# ============================================================
 
 st.markdown(
     """
@@ -799,7 +1008,7 @@ st.markdown(
         font-size: .92rem;
         font-weight: 600;
     }
-    .soft-card, .score-box, .editor-card {
+    .soft-card, .score-box, .editor-card, .summary-card {
         border: 1px solid rgba(212,175,55,.14);
         border-radius: 18px;
         padding: 1rem;
@@ -937,6 +1146,7 @@ with st.sidebar:
         st.image(logo_file, use_container_width=True)
 
     st.markdown("## ÇOFSAT")
+
     st.markdown("### Değerlendirme modu")
     selected_mode = st.radio("", options=list(MODE_PROFILES.keys()), index=0, label_visibility="collapsed")
     st.markdown(f"**{selected_mode}**")
@@ -990,6 +1200,12 @@ if uploaded_file is not None:
     image = load_image_from_upload(uploaded_file)
     result = critique_image(image, selected_mode, selected_editor_mode)
 
+    attention = build_attention_map(image)
+    main_points = top_regions(attention, n=3, window=max(35, min(image.size) // 12))
+    distraction_points = distraction_regions(attention, main_points, n=2)
+    overlay_img = draw_analysis_overlay(image, main_points, distraction_points)
+    heatmap_img = build_heatmap_image(image, attention)
+
     col1, col2 = st.columns([1.02, 0.98])
 
     with col1:
@@ -1005,6 +1221,39 @@ if uploaded_file is not None:
 
     st.markdown("### Kısa etiketler")
     st.markdown("".join([f"<span class='tag-pill'>{tag}</span>" for tag in result.tags]), unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("## Hızlı Editör Özeti")
+
+    s1, s2, s3 = st.columns(3)
+    with s1:
+        st.markdown("<div class='summary-card'><div class='editor-title'>Ana güçlü taraf</div><div class='mini-note'>"
+                    + result.key_strength + "</div></div>", unsafe_allow_html=True)
+    with s2:
+        st.markdown("<div class='summary-card'><div class='editor-title'>Ana sorun</div><div class='mini-note'>"
+                    + result.key_issue + "</div></div>", unsafe_allow_html=True)
+    with s3:
+        st.markdown("<div class='summary-card'><div class='editor-title'>Tek hamlede en büyük iyileşme</div><div class='mini-note'>"
+                    + result.one_move_improvement + "</div></div>", unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("## Görsel Analiz Katmanı")
+
+    v1, v2 = st.columns(2)
+    with v1:
+        st.markdown("### Odak noktası · Dikkat dağıtan alan · Göz akışı")
+        st.image(overlay_img, use_container_width=True)
+        st.markdown(
+            "<div class='mini-note'>Sarı daireler: güçlü odak noktaları · Kırmızı kareler: dikkat dağıtabilecek bölgeler · Sarı çizgi: gözün muhtemel akışı</div>",
+            unsafe_allow_html=True,
+        )
+    with v2:
+        st.markdown("### Heatmap")
+        st.image(heatmap_img, use_container_width=True)
+        st.markdown(
+            "<div class='mini-note'>Parlak sıcak bölgeler, gözün daha hızlı tutunabileceği alanları gösterir.</div>",
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     st.markdown(f"## {selected_mode} Okuması")
