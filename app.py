@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# Kültür / Sabitler
+# Sabitler
 # ============================================================
 
 CULTURE = {
@@ -111,6 +111,8 @@ EDITOR_MODES = {
     },
 }
 
+PHI = 1.61803398875
+
 
 # ============================================================
 # Veri Yapıları
@@ -161,6 +163,8 @@ class CritiqueResult:
     key_strength: str
     key_issue: str
     one_move_improvement: str
+    suggested_mode: str
+    suggested_mode_reason: str
     metrics: Dict
 
 
@@ -524,14 +528,53 @@ def score_band(score_100: float) -> str:
     return "Çok Güçlü"
 
 
-def tone_text(text: str, editor_mode: str) -> str:
-    if editor_mode == "Yapıcı":
-        return text
-    if editor_mode == "Dürüst":
-        return text.replace("biraz ", "").replace("nispeten ", "")
-    if editor_mode == "Sert":
-        return text.replace("biraz ", "").replace("nispeten ", "").replace("olabilir", "gerekiyor")
-    return text
+# ============================================================
+# Otomatik Tür Önerisi
+# ============================================================
+
+def suggest_mode(metrics: ImageMetrics, scores_100: Dict[str, float]) -> Tuple[str, str]:
+    candidates = {
+        "Sokak": (
+            0.32 * scores_100["zamanlama"]
+            + 0.24 * scores_100["anlati_gucu"]
+            + 0.18 * scores_100["derinlik_hissi"]
+            + 0.12 * scores_100["dikkat_dagitici_unsurlar"]
+            + 0.14 * scores_100["tekrar_bakma_istegi"]
+        ),
+        "Portre": (
+            0.30 * scores_100["odak_ve_hiyerarsi"]
+            + 0.28 * scores_100["duygusal_yogunluk"]
+            + 0.18 * scores_100["isik_yonu"]
+            + 0.12 * scores_100["anlati_gucu"]
+            + 0.12 * scores_100["sadelik"]
+        ),
+        "Belgesel": (
+            0.30 * scores_100["niyet_tutarliligi"]
+            + 0.26 * scores_100["editoryal_deger"]
+            + 0.20 * scores_100["anlati_gucu"]
+            + 0.12 * scores_100["zamanlama"]
+            + 0.12 * scores_100["tekrar_bakma_istegi"]
+        ),
+        "Soyut": (
+            0.34 * scores_100["gorsel_dil"]
+            + 0.24 * scores_100["kompozisyon"]
+            + 0.18 * scores_100["negatif_alan"]
+            + 0.12 * scores_100["tekrar_bakma_istegi"]
+            + 0.12 * scores_100["isik_yonu"]
+        ),
+    }
+
+    best_mode = max(candidates.items(), key=lambda x: x[1])[0]
+    if best_mode == "Sokak":
+        reason = "Zamanlama, anlatı ve sahne akışı birlikte çalıştığı için bu kare sokak okumasına daha yakın görünüyor."
+    elif best_mode == "Portre":
+        reason = "Odak, duygusal yoğunluk ve ışığın özneyi taşıma biçimi bu kareyi portreye yaklaştırıyor."
+    elif best_mode == "Belgesel":
+        reason = "Niyet, editoryal ağırlık ve bağlam hissi bu karede belgesel tarafı öne çıkarıyor."
+    else:
+        reason = "Biçim, boşluk ve görsel dil ilişkisi bu kareyi soyut okumaya daha yakın kılıyor."
+
+    return best_mode, reason
 
 
 # ============================================================
@@ -832,6 +875,7 @@ def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueRes
 
     strengths = pick_strengths(scores_100, editor_mode)
     dev_areas = pick_development_areas(scores_100, editor_mode)
+    suggested_mode, suggested_mode_reason = suggest_mode(metrics, scores_100)
 
     return CritiqueResult(
         total_score=total,
@@ -851,6 +895,8 @@ def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueRes
         key_strength=build_key_strength(scores_100, editor_mode),
         key_issue=build_key_issue(scores_100, editor_mode),
         one_move_improvement=build_one_move_improvement(scores_100, editor_mode),
+        suggested_mode=suggested_mode,
+        suggested_mode_reason=suggested_mode_reason,
         metrics=asdict(metrics),
     )
 
@@ -922,17 +968,14 @@ def draw_analysis_overlay(
     overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # göz akışı çizgisi
     if len(main_points) >= 2:
         draw.line(main_points, fill=(255, 220, 120, 200), width=5)
 
-    # odak noktaları
     for i, (x, y) in enumerate(main_points):
         r = 18 if i == 0 else 14
         draw.ellipse((x - r, y - r, x + r, y + r), outline=(255, 220, 120, 255), width=4)
         draw.ellipse((x - 4, y - 4, x + 4, y + 4), fill=(255, 220, 120, 255))
 
-    # dikkat dağıtan alanlar
     for x, y in distraction_points:
         r = 20
         draw.rectangle((x - r, y - r, x + r, y + r), outline=(255, 90, 90, 220), width=4)
@@ -952,6 +995,131 @@ def build_heatmap_image(img: Image.Image, attention: np.ndarray) -> Image.Image:
     heat_img = Image.fromarray(heat, mode="RGBA")
     mixed = Image.alpha_composite(base, heat_img)
     return mixed.convert("RGB")
+
+
+# ============================================================
+# Golden Ratio Şemaları
+# ============================================================
+
+def phi_grid_positions(w: int, h: int) -> Tuple[int, int, int, int]:
+    x1 = int(w / PHI / PHI * PHI)  # stabilize
+    x1 = int(w / PHI / 1.0)
+    x2 = w - x1
+    y1 = int(h / PHI / 1.0)
+    y2 = h - y1
+    return x1, x2, y1, y2
+
+
+def draw_phi_grid(img: Image.Image) -> Image.Image:
+    out = img.copy().convert("RGBA")
+    overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    w, h = out.size
+    x1, x2, y1, y2 = phi_grid_positions(w, h)
+
+    draw.line((x1, 0, x1, h), fill=(120, 220, 255, 220), width=3)
+    draw.line((x2, 0, x2, h), fill=(120, 220, 255, 220), width=3)
+    draw.line((0, y1, w, y1), fill=(120, 220, 255, 220), width=3)
+    draw.line((0, y2, w, y2), fill=(120, 220, 255, 220), width=3)
+
+    return Image.alpha_composite(out, overlay).convert("RGB")
+
+
+def draw_golden_diagonals(img: Image.Image) -> Image.Image:
+    out = img.copy().convert("RGBA")
+    overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    w, h = out.size
+
+    draw.line((0, 0, w, h), fill=(255, 160, 110, 220), width=3)
+    draw.line((w, 0, 0, h), fill=(255, 160, 110, 220), width=3)
+
+    x1, x2, y1, y2 = phi_grid_positions(w, h)
+    draw.line((x1, 0, w, y2), fill=(255, 160, 110, 180), width=2)
+    draw.line((0, y1, x2, h), fill=(255, 160, 110, 180), width=2)
+    draw.line((x2, 0, 0, y2), fill=(255, 160, 110, 180), width=2)
+    draw.line((w, y1, x1, h), fill=(255, 160, 110, 180), width=2)
+
+    return Image.alpha_composite(out, overlay).convert("RGB")
+
+
+def draw_golden_spiral(img: Image.Image) -> Image.Image:
+    out = img.copy().convert("RGBA")
+    overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    w, h = out.size
+
+    # Basitleştirilmiş spiral yaklaşımı
+    rects = []
+    x, y = 0, 0
+    rw, rh = w, h
+    horizontal = rw >= rh
+
+    for _ in range(7):
+        rects.append((x, y, x + rw, y + rh))
+        if horizontal:
+            new_rw = int(rw / PHI)
+            x = x + (rw - new_rw)
+            rw = new_rw
+        else:
+            new_rh = int(rh / PHI)
+            y = y + (rh - new_rh)
+            rh = new_rh
+        horizontal = not horizontal
+        if rw < 20 or rh < 20:
+            break
+
+    for i, r in enumerate(rects[:-1]):
+        x1, y1, x2, y2 = r
+        if i % 4 == 0:
+            draw.arc((x1, y1, x2, y2), start=90, end=180, fill=(170, 255, 140, 220), width=4)
+        elif i % 4 == 1:
+            draw.arc((x1, y1, x2, y2), start=180, end=270, fill=(170, 255, 140, 220), width=4)
+        elif i % 4 == 2:
+            draw.arc((x1, y1, x2, y2), start=270, end=360, fill=(170, 255, 140, 220), width=4)
+        else:
+            draw.arc((x1, y1, x2, y2), start=0, end=90, fill=(170, 255, 140, 220), width=4)
+
+    return Image.alpha_composite(out, overlay).convert("RGB")
+
+
+def composition_alignment_score(points: List[Tuple[int, int]], w: int, h: int, scheme: str) -> float:
+    if not points:
+        return 0.0
+
+    if scheme == "phi_grid":
+        x1, x2, y1, y2 = phi_grid_positions(w, h)
+        anchors = [(x1, y1), (x1, y2), (x2, y1), (x2, y2)]
+    elif scheme == "golden_diagonal":
+        anchors = [(0, 0), (w, h), (w, 0), (0, h), (w // 2, h // 2)]
+    else:  # spiral center approx
+        anchors = [(int(w * 0.62), int(h * 0.62)), (int(w * 0.38), int(h * 0.38)), (w // 2, h // 2)]
+
+    best = 0.0
+    diag = math.sqrt(w * w + h * h) + 1e-9
+    for px, py in points:
+        d = min(math.sqrt((px - ax) ** 2 + (py - ay) ** 2) for ax, ay in anchors)
+        score = 1 - (d / (diag * 0.35))
+        best = max(best, score)
+    return clamp01(best)
+
+
+def describe_golden_ratio_fit(points: List[Tuple[int, int]], w: int, h: int) -> Tuple[str, str]:
+    scores = {
+        "Phi Grid": composition_alignment_score(points, w, h, "phi_grid"),
+        "Golden Diagonal": composition_alignment_score(points, w, h, "golden_diagonal"),
+        "Golden Spiral": composition_alignment_score(points, w, h, "golden_spiral"),
+    }
+    best = max(scores.items(), key=lambda x: x[1])[0]
+
+    if best == "Phi Grid":
+        explanation = "Odak ağırlığı altın oran kesişimlerine daha yakın durduğu için phi grid bu kareyi en anlaşılır biçimde açıklıyor."
+    elif best == "Golden Diagonal":
+        explanation = "Göz akışı ve yön hissi diyagonal yapı üzerinden daha güçlü çalıştığı için golden diagonal bu kareye daha yakın görünüyor."
+    else:
+        explanation = "Odak ağırlığı dönerek içeri çekilen bir yapı hissi verdiği için golden spiral bu kareye daha uygun duruyor."
+
+    return best, explanation
 
 
 # ============================================================
@@ -1027,14 +1195,6 @@ st.markdown(
         line-height: 1.7;
         color: rgba(255,255,255,.98) !important;
         opacity: 1 !important;
-    }
-    .quote-box {
-        border-left: 4px solid rgba(212,175,55,.92);
-        padding: .95rem 1rem;
-        background: rgba(212,175,55,.08);
-        border-radius: 0 14px 14px 0;
-        margin: .5rem 0 1rem 0;
-        color: #fff3cf;
     }
     .upload-label {
         font-size: 1rem;
@@ -1206,6 +1366,12 @@ if uploaded_file is not None:
     overlay_img = draw_analysis_overlay(image, main_points, distraction_points)
     heatmap_img = build_heatmap_image(image, attention)
 
+    phi_grid_img = draw_phi_grid(image)
+    diagonal_img = draw_golden_diagonals(image)
+    spiral_img = draw_golden_spiral(image)
+
+    best_scheme, scheme_reason = describe_golden_ratio_fit(main_points, image.size[0], image.size[1])
+
     col1, col2 = st.columns([1.02, 0.98])
 
     with col1:
@@ -1237,6 +1403,15 @@ if uploaded_file is not None:
                     + result.one_move_improvement + "</div></div>", unsafe_allow_html=True)
 
     st.markdown("---")
+    st.markdown("## Otomatik Tür Önerisi")
+
+    a1, a2 = st.columns([0.35, 0.65])
+    with a1:
+        st.metric("Önerilen tür", result.suggested_mode)
+    with a2:
+        st.markdown(f"<div class='summary-card'><div class='mini-note'>{result.suggested_mode_reason}</div></div>", unsafe_allow_html=True)
+
+    st.markdown("---")
     st.markdown("## Görsel Analiz Katmanı")
 
     v1, v2 = st.columns(2)
@@ -1254,6 +1429,26 @@ if uploaded_file is not None:
             "<div class='mini-note'>Parlak sıcak bölgeler, gözün daha hızlı tutunabileceği alanları gösterir.</div>",
             unsafe_allow_html=True,
         )
+
+    st.markdown("---")
+    st.markdown("## Altın Oran Rehberleri")
+
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown("### Phi Grid")
+        st.image(phi_grid_img, use_container_width=True)
+    with g2:
+        st.markdown("### Golden Diagonal")
+        st.image(diagonal_img, use_container_width=True)
+
+    g3, g4 = st.columns(2)
+    with g3:
+        st.markdown("### Golden Spiral")
+        st.image(spiral_img, use_container_width=True)
+    with g4:
+        st.markdown("<div class='summary-card'><div class='editor-title'>En uygun görünen şema</div><div class='mini-note'>"
+                    + f"<strong>{best_scheme}</strong><br><br>{scheme_reason}"
+                    + "</div></div>", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"## {selected_mode} Okuması")
