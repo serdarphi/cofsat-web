@@ -21,8 +21,10 @@ st.set_page_config(
 )
 
 # ============================================================
-# Sabitler
+# SABİTLER
 # ============================================================
+
+PHI = 1.61803398875
 
 CULTURE = {
     "ad": "ÇOFSAT",
@@ -111,11 +113,8 @@ EDITOR_MODES = {
     },
 }
 
-PHI = 1.61803398875
-
-
 # ============================================================
-# Veri Yapıları
+# VERİ YAPILARI
 # ============================================================
 
 @dataclass
@@ -169,7 +168,7 @@ class CritiqueResult:
 
 
 # ============================================================
-# Yardımcılar
+# YARDIMCI FONKSİYONLAR
 # ============================================================
 
 def find_logo_file() -> Optional[str]:
@@ -192,6 +191,20 @@ def clamp01(x: float) -> float:
     return max(0.0, min(1.0, x))
 
 
+def tone_text(text: str, editor_mode: str) -> str:
+    if editor_mode == "Yapıcı":
+        return text
+    if editor_mode == "Dürüst":
+        return text.replace("biraz ", "").replace("nispeten ", "")
+    if editor_mode == "Sert":
+        return (
+            text.replace("biraz ", "")
+            .replace("nispeten ", "")
+            .replace("olabilir", "gerekiyor")
+        )
+    return text
+
+
 def normalize_array(arr: np.ndarray) -> np.ndarray:
     arr = arr.astype(np.float32)
     mn = arr.min()
@@ -212,7 +225,7 @@ def estimate_focus_score(gray: np.ndarray) -> float:
 def estimate_edge_density(gray: np.ndarray) -> float:
     if cv2 is None:
         gy, gx = np.gradient(gray.astype(np.float32))
-        mag = np.sqrt(gx ** 2 + gy ** 2)
+        mag = np.sqrt(gx**2 + gy**2)
         return float((mag > np.percentile(mag, 80)).mean())
     edges = cv2.Canny(gray, 100, 200)
     return float((edges > 0).mean())
@@ -240,7 +253,7 @@ def estimate_symmetry(gray: np.ndarray) -> float:
 def estimate_visual_noise(gray: np.ndarray) -> float:
     small = np.array(Image.fromarray(gray).resize((64, 64)))
     gy, gx = np.gradient(small.astype(np.float32))
-    local_activity = np.sqrt(gx ** 2 + gy ** 2)
+    local_activity = np.sqrt(gx**2 + gy**2)
     return float(np.clip(local_activity.mean() / 40.0, 0, 1))
 
 
@@ -256,7 +269,7 @@ def estimate_thirds_alignment(cx: float, cy: float) -> float:
 def estimate_negative_space(gray: np.ndarray) -> float:
     small = np.array(Image.fromarray(gray).resize((96, 96))).astype(np.float32)
     gy, gx = np.gradient(small)
-    mag = np.sqrt(gx ** 2 + gy ** 2)
+    mag = np.sqrt(gx**2 + gy**2)
     low_activity = (mag < np.percentile(mag, 35)).mean()
     return float(low_activity)
 
@@ -297,9 +310,9 @@ def extract_metrics(img: Image.Image) -> ImageMetrics:
 
     h, w = gray.shape
     left_brightness = float(gray[:, : max(1, w // 2)].mean())
-    right_brightness = float(gray[:, w // 2 :].mean())
+    right_brightness = float(gray[:, w // 2:].mean())
     top_brightness = float(gray[: max(1, h // 2), :].mean())
-    bottom_brightness = float(gray[h // 2 :, :].mean())
+    bottom_brightness = float(gray[h // 2:, :].mean())
 
     return ImageMetrics(
         width=img.width,
@@ -332,20 +345,24 @@ def normalize_focus(metrics: ImageMetrics) -> float:
 
 
 # ============================================================
-# Puanlama
+# PUANLAMA
 # ============================================================
 
 def score_first_impact(metrics: ImageMetrics) -> float:
-    focus = normalize_focus(metrics)
-    tension = metrics.dynamic_tension_score
-    tonal = metrics.tonal_balance_score
-    return clamp01(0.35 * focus + 0.35 * tension + 0.30 * tonal)
+    return clamp01(
+        0.35 * normalize_focus(metrics)
+        + 0.35 * metrics.dynamic_tension_score
+        + 0.30 * metrics.tonal_balance_score
+    )
 
 
 def score_technical(metrics: ImageMetrics) -> float:
     clip_penalty = min(1.0, (metrics.highlight_clip_ratio + metrics.shadow_clip_ratio) * 8)
-    focus = normalize_focus(metrics)
-    return clamp01(0.4 * metrics.tonal_balance_score + 0.35 * focus + 0.25 * (1 - clip_penalty))
+    return clamp01(
+        0.4 * metrics.tonal_balance_score
+        + 0.35 * normalize_focus(metrics)
+        + 0.25 * (1 - clip_penalty)
+    )
 
 
 def score_composition(metrics: ImageMetrics) -> float:
@@ -529,7 +546,7 @@ def score_band(score_100: float) -> str:
 
 
 # ============================================================
-# Otomatik Tür Önerisi
+# OTOMATİK TÜR ÖNERİSİ
 # ============================================================
 
 def suggest_mode(metrics: ImageMetrics, scores_100: Dict[str, float]) -> Tuple[str, str]:
@@ -565,6 +582,7 @@ def suggest_mode(metrics: ImageMetrics, scores_100: Dict[str, float]) -> Tuple[s
     }
 
     best_mode = max(candidates.items(), key=lambda x: x[1])[0]
+
     if best_mode == "Sokak":
         reason = "Zamanlama, anlatı ve sahne akışı birlikte çalıştığı için bu kare sokak okumasına daha yakın görünüyor."
     elif best_mode == "Portre":
@@ -578,7 +596,7 @@ def suggest_mode(metrics: ImageMetrics, scores_100: Dict[str, float]) -> Tuple[s
 
 
 # ============================================================
-# Yorumlama
+# METİN ÜRETİMİ
 # ============================================================
 
 def overall_tag_from_scores(scores_100: Dict[str, float], mode: str) -> str:
@@ -724,7 +742,7 @@ def build_one_move_improvement(scores_100: Dict[str, float], editor_mode: str) -
     return tone_text(mapping[key], editor_mode)
 
 
-def build_reading_prompts(scores_100: Dict[str, float], mode: str) -> List[str]:
+def build_reading_prompts(scores_100: Dict[str, float]) -> List[str]:
     prompts = {
         "ilk_etki": "Bu kare ilk anda beni gerçekten durduruyor mu?",
         "odak_ve_hiyerarsi": "Gözüm nereye gidiyor ve orada kalmak için yeterli sebep buluyor mu?",
@@ -767,7 +785,7 @@ def build_shooting_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mo
     return unique[:5] if unique else ["Bu kare küçük kararlarla daha da güçlenebilir."]
 
 
-def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> List[str]:
+def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], editor_mode: str) -> List[str]:
     notes = []
     if metrics.highlight_clip_ratio > 0.03:
         notes.append("Highlight bölgelerini biraz geri çekmek, fotoğrafın dikkat dengesini daha kontrollü hale getirir.")
@@ -788,7 +806,7 @@ def build_editing_notes(metrics: ImageMetrics, scores_100: Dict[str, float], mod
     return unique[:5] if unique else ["Bu kare için aşırı filtre yerine küçük ve bilinçli ton düzenlemeleri en iyi sonucu verir."]
 
 
-def build_first_reading(total: float, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
+def build_first_reading(scores_100: Dict[str, float], editor_mode: str) -> str:
     if scores_100["ilk_etki"] >= 75:
         text = "İlk anda bu kare kendine alan açabiliyor. İzleyiciyi tamamen dışarıda bırakmayan, dikkat toplamayı bilen bir giriş kuruyor."
     elif scores_100["ilk_etki"] >= 60:
@@ -798,7 +816,7 @@ def build_first_reading(total: float, scores_100: Dict[str, float], mode: str, e
     return tone_text(text, editor_mode)
 
 
-def build_structural_reading(metrics: ImageMetrics, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
+def build_structural_reading(scores_100: Dict[str, float], editor_mode: str) -> str:
     pieces = []
     if scores_100["kompozisyon"] >= 70:
         pieces.append("kadrajın iskeleti toparlanmış")
@@ -814,11 +832,10 @@ def build_structural_reading(metrics: ImageMetrics, scores_100: Dict[str, float]
         pieces.append("derinlik hissi biraz daha güçlenirse fotoğraf hacim kazanır")
     if scores_100["dikkat_dagitici_unsurlar"] < 60:
         pieces.append("bazı bölgeler ana anlatının önüne geçiyor")
-    text = "Yapısal olarak bakıldığında " + ", ".join(pieces) + "."
-    return tone_text(text, editor_mode)
+    return tone_text("Yapısal olarak bakıldığında " + ", ".join(pieces) + ".", editor_mode)
 
 
-def build_editorial_result(total: float, scores_100: Dict[str, float], mode: str, editor_mode: str) -> str:
+def build_editorial_result(total: float, editor_mode: str) -> str:
     if total >= 80:
         text = "Genel sonuç olarak kare yalnızca doğru kararlar içermiyor; aynı zamanda kendi dilini hissettirebiliyor. Editöryel olarak güçlü bir zemini var."
     elif total >= 65:
@@ -885,12 +902,12 @@ def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueRes
         strengths=strengths,
         development_areas=dev_areas,
         editor_summary=build_editor_summary(total, strengths, dev_areas, mode, editor_mode),
-        first_reading=build_first_reading(total, scores_100, mode, editor_mode),
-        structural_reading=build_structural_reading(metrics, scores_100, mode, editor_mode),
-        editorial_result=build_editorial_result(total, scores_100, mode, editor_mode),
+        first_reading=build_first_reading(scores_100, editor_mode),
+        structural_reading=build_structural_reading(scores_100, editor_mode),
+        editorial_result=build_editorial_result(total, editor_mode),
         shooting_notes=build_shooting_notes(metrics, scores_100, mode, editor_mode),
-        editing_notes=build_editing_notes(metrics, scores_100, mode, editor_mode),
-        reading_prompts=build_reading_prompts(scores_100, mode),
+        editing_notes=build_editing_notes(metrics, scores_100, editor_mode),
+        reading_prompts=build_reading_prompts(scores_100),
         tags=build_tags(scores_100, total, mode),
         key_strength=build_key_strength(scores_100, editor_mode),
         key_issue=build_key_issue(scores_100, editor_mode),
@@ -902,7 +919,7 @@ def critique_image(img: Image.Image, mode: str, editor_mode: str) -> CritiqueRes
 
 
 # ============================================================
-# Heatmap / Overlay
+# HEATMAP / OVERLAY
 # ============================================================
 
 def build_attention_map(img: Image.Image) -> np.ndarray:
@@ -913,17 +930,18 @@ def build_attention_map(img: Image.Image) -> np.ndarray:
     gy[1:, :] = np.abs(gray[1:, :] - gray[:-1, :])
     gx[:, 1:] = np.abs(gray[:, 1:] - gray[:, :-1])
 
-    grad = np.sqrt(gx ** 2 + gy ** 2)
+    grad = np.sqrt(gx**2 + gy**2)
     inv = 255.0 - gray
+
     grad_n = normalize_array(grad)
     inv_n = normalize_array(inv)
 
-    if cv2 is not None:
-        blur = cv2.GaussianBlur((0.70 * grad_n + 0.30 * inv_n).astype(np.float32), (0, 0), 9)
-    else:
-        blur = 0.70 * grad_n + 0.30 * inv_n
+    raw = (0.70 * grad_n + 0.30 * inv_n).astype(np.float32)
 
-    return normalize_array(blur)
+    if cv2 is not None:
+        raw = cv2.GaussianBlur(raw, (0, 0), 9)
+
+    return normalize_array(raw)
 
 
 def top_regions(attention: np.ndarray, n: int = 3, window: int = 50) -> List[Tuple[int, int]]:
@@ -980,32 +998,31 @@ def draw_analysis_overlay(
         r = 20
         draw.rectangle((x - r, y - r, x + r, y + r), outline=(255, 90, 90, 220), width=4)
 
-    out = Image.alpha_composite(out, overlay)
-    return out.convert("RGB")
+    return Image.alpha_composite(out, overlay).convert("RGB")
 
 
 def build_heatmap_image(img: Image.Image, attention: np.ndarray) -> Image.Image:
     base = img.copy().convert("RGBA")
-    a = (normalize_array(attention) * 170).astype(np.uint8)
+    alpha = (normalize_array(attention) * 170).astype(np.uint8)
+
     heat = np.zeros((attention.shape[0], attention.shape[1], 4), dtype=np.uint8)
     heat[..., 0] = 255
     heat[..., 1] = 190
     heat[..., 2] = 60
-    heat[..., 3] = a
+    heat[..., 3] = alpha
+
     heat_img = Image.fromarray(heat, mode="RGBA")
-    mixed = Image.alpha_composite(base, heat_img)
-    return mixed.convert("RGB")
+    return Image.alpha_composite(base, heat_img).convert("RGB")
 
 
 # ============================================================
-# Golden Ratio Şemaları
+# GOLDEN RATIO ŞEMALARI
 # ============================================================
 
 def phi_grid_positions(w: int, h: int) -> Tuple[int, int, int, int]:
-    x1 = int(w / PHI / PHI * PHI)  # stabilize
-    x1 = int(w / PHI / 1.0)
+    x1 = int(w / PHI)
     x2 = w - x1
-    y1 = int(h / PHI / 1.0)
+    y1 = int(h / PHI)
     y2 = h - y1
     return x1, x2, y1, y2
 
@@ -1030,11 +1047,10 @@ def draw_golden_diagonals(img: Image.Image) -> Image.Image:
     overlay = Image.new("RGBA", out.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
     w, h = out.size
+    x1, x2, y1, y2 = phi_grid_positions(w, h)
 
     draw.line((0, 0, w, h), fill=(255, 160, 110, 220), width=3)
     draw.line((w, 0, 0, h), fill=(255, 160, 110, 220), width=3)
-
-    x1, x2, y1, y2 = phi_grid_positions(w, h)
     draw.line((x1, 0, w, y2), fill=(255, 160, 110, 180), width=2)
     draw.line((0, y1, x2, h), fill=(255, 160, 110, 180), width=2)
     draw.line((x2, 0, 0, y2), fill=(255, 160, 110, 180), width=2)
@@ -1049,7 +1065,6 @@ def draw_golden_spiral(img: Image.Image) -> Image.Image:
     draw = ImageDraw.Draw(overlay)
     w, h = out.size
 
-    # Basitleştirilmiş spiral yaklaşımı
     rects = []
     x, y = 0, 0
     rw, rh = w, h
@@ -1092,7 +1107,7 @@ def composition_alignment_score(points: List[Tuple[int, int]], w: int, h: int, s
         anchors = [(x1, y1), (x1, y2), (x2, y1), (x2, y2)]
     elif scheme == "golden_diagonal":
         anchors = [(0, 0), (w, h), (w, 0), (0, h), (w // 2, h // 2)]
-    else:  # spiral center approx
+    else:
         anchors = [(int(w * 0.62), int(h * 0.62)), (int(w * 0.38), int(h * 0.38)), (w // 2, h // 2)]
 
     best = 0.0
@@ -1123,7 +1138,7 @@ def describe_golden_ratio_fit(points: List[Tuple[int, int]], w: int, h: int) -> 
 
 
 # ============================================================
-# UI
+# STİL
 # ============================================================
 
 st.markdown(
@@ -1299,6 +1314,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ============================================================
+# ARAYÜZ
+# ============================================================
+
 logo_file = find_logo_file()
 
 with st.sidebar:
@@ -1356,6 +1375,10 @@ uploaded_file = st.file_uploader(
     label_visibility="collapsed",
 )
 
+# ============================================================
+# ÇIKTI
+# ============================================================
+
 if uploaded_file is not None:
     image = load_image_from_upload(uploaded_file)
     result = critique_image(image, selected_mode, selected_editor_mode)
@@ -1363,6 +1386,7 @@ if uploaded_file is not None:
     attention = build_attention_map(image)
     main_points = top_regions(attention, n=3, window=max(35, min(image.size) // 12))
     distraction_points = distraction_regions(attention, main_points, n=2)
+
     overlay_img = draw_analysis_overlay(image, main_points, distraction_points)
     heatmap_img = build_heatmap_image(image, attention)
 
@@ -1393,14 +1417,26 @@ if uploaded_file is not None:
 
     s1, s2, s3 = st.columns(3)
     with s1:
-        st.markdown("<div class='summary-card'><div class='editor-title'>Ana güçlü taraf</div><div class='mini-note'>"
-                    + result.key_strength + "</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='summary-card'><div class='editor-title'>Ana güçlü taraf</div><div class='mini-note'>"
+            + result.key_strength
+            + "</div></div>",
+            unsafe_allow_html=True,
+        )
     with s2:
-        st.markdown("<div class='summary-card'><div class='editor-title'>Ana sorun</div><div class='mini-note'>"
-                    + result.key_issue + "</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='summary-card'><div class='editor-title'>Ana sorun</div><div class='mini-note'>"
+            + result.key_issue
+            + "</div></div>",
+            unsafe_allow_html=True,
+        )
     with s3:
-        st.markdown("<div class='summary-card'><div class='editor-title'>Tek hamlede en büyük iyileşme</div><div class='mini-note'>"
-                    + result.one_move_improvement + "</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='summary-card'><div class='editor-title'>Tek hamlede en büyük iyileşme</div><div class='mini-note'>"
+            + result.one_move_improvement
+            + "</div></div>",
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     st.markdown("## Otomatik Tür Önerisi")
@@ -1409,7 +1445,12 @@ if uploaded_file is not None:
     with a1:
         st.metric("Önerilen tür", result.suggested_mode)
     with a2:
-        st.markdown(f"<div class='summary-card'><div class='mini-note'>{result.suggested_mode_reason}</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='summary-card'><div class='mini-note'>"
+            + result.suggested_mode_reason
+            + "</div></div>",
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     st.markdown("## Görsel Analiz Katmanı")
@@ -1446,9 +1487,14 @@ if uploaded_file is not None:
         st.markdown("### Golden Spiral")
         st.image(spiral_img, use_container_width=True)
     with g4:
-        st.markdown("<div class='summary-card'><div class='editor-title'>En uygun görünen şema</div><div class='mini-note'>"
-                    + f"<strong>{best_scheme}</strong><br><br>{scheme_reason}"
-                    + "</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            "<div class='summary-card'><div class='editor-title'>En uygun görünen şema</div><div class='mini-note'><strong>"
+            + best_scheme
+            + "</strong><br><br>"
+            + scheme_reason
+            + "</div></div>",
+            unsafe_allow_html=True,
+        )
 
     st.markdown("---")
     st.markdown(f"## {selected_mode} Okuması")
